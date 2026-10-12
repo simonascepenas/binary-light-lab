@@ -51,7 +51,7 @@ function ByteDisplay({ value, compact = false, micro = false }: { value: number;
 
 function AsciiTable() {
   const entries: Array<[number, string]> = [
-    [32, 'SPACE'], [46, '.'],
+    [32, 'SPACE'], [33, '!'], [46, '.'], [63, '?'],
     ...Array.from({ length: 10 }, (_, i) => [48 + i, String(i)] as [number, string]),
     ...Array.from({ length: 26 }, (_, i) => [65 + i, String.fromCharCode(65 + i)] as [number, string]),
   ];

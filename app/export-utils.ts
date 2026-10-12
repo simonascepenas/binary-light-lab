@@ -7,7 +7,7 @@ export type ExportRepresentation = 'bulbs' | 'digits';
 export type AsciiTablePosition = 'none' | 'first' | 'last';
 
 const asciiEntries: Array<[number, string]> = [
-  [32, 'SPACE'], [46, '.'],
+  [32, 'SPACE'], [33, '!'], [46, '.'], [63, '?'],
   ...Array.from({ length: 10 }, (_, index) => [48 + index, String(index)] as [number, string]),
   ...Array.from({ length: 26 }, (_, index) => [65 + index, String.fromCharCode(65 + index)] as [number, string]),
 ];
@@ -35,10 +35,12 @@ ${pageBreakBefore ? '\\par\\newpage' : ''}
 \\medskip
 \\begin{center}
 \\renewcommand{\\arraystretch}{1.16}
-{\\tiny\\begin{tabular}{@{}rcl@{\\hspace{1em}}rcl@{\\hspace{1em}}rcl@{\\hspace{1em}}rcl@{}}
+\\setlength{\\fboxsep}{7pt}
+\\setlength{\\fboxrule}{0.7pt}
+{\\tiny\\fbox{\\begin{tabular}{@{}rcl@{\\hspace{1em}}rcl@{\\hspace{1em}}rcl@{\\hspace{1em}}rcl@{}}
 {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} & {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} & {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} & {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} \\\\[0.15em]
 ${rows}
-\\end{tabular}}
+\\end{tabular}}}
 \\end{center}
 `;
 }
@@ -278,6 +280,7 @@ function asciiReferencePageStream() {
   let stream = pdfText('ASCII REFERENCE', 40, 805, 15, true);
   stream += pdfAuthorName(446, 805, 7);
   stream += pdfText('Characters used in this activity, with decimal values and 8-bit binary codes.', 40, 784, 7);
+  stream += '0 0 0 RG 0.8 w 40 519 523 244 re S\n';
   const columns = Array.from({ length: 4 }, (_, column) => asciiEntries.slice(column * 10, column * 10 + 10));
   columns.forEach((column, columnIndex) => {
     const x = 40 + columnIndex * 135;
