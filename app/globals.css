@@ -33,3 +33,6 @@ body { background-color:#fff; background-image:linear-gradient(var(--grid) 1px,t
 .hero { background:rgba(255,255,255,.32); }
 .tests-section,.results-section { background-color:transparent; }
 .bulb-row:not(.compact-row),.challenge-bytes,.converter-output { background-color:#fff; background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px); background-size:24px 24px; }
+.bulb-row:not(.compact-row) { overflow-x:auto; }
+.start-card input:focus,.answer-form input:focus,.converter-input input:focus,button:focus-visible,[tabindex="0"]:focus-visible { outline:3px solid var(--blue); outline-offset:3px; }
+.answer-form input:disabled,.answer-form button:disabled { cursor:wait; opacity:.65; }

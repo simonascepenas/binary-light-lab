@@ -46,14 +46,21 @@ export async function saveResult(result: Omit<SavedResult, 'id'>) {
     .run();
 }
 
-export async function listResults(limit = 20): Promise<SavedResult[]> {
+export async function listResults(limit = 20, classCode = ''): Promise<SavedResult[]> {
   await ensureSchema();
-  const response = await env.DB.prepare(`SELECT
+  const query = classCode ? `SELECT
     id, display_name AS displayName, class_code AS classCode, score, accuracy,
     duration_seconds AS durationSeconds, mistakes, task_type AS taskType,
     level, questions_total AS questionsTotal, completed_at AS completedAt
-    FROM results ORDER BY score DESC, duration_seconds ASC LIMIT ?`)
-    .bind(limit)
-    .all<SavedResult>();
+    FROM results WHERE class_code = ? ORDER BY score DESC, duration_seconds ASC LIMIT ?`
+    : `SELECT
+    id, display_name AS displayName, class_code AS classCode, score, accuracy,
+    duration_seconds AS durationSeconds, mistakes, task_type AS taskType,
+    level, questions_total AS questionsTotal, completed_at AS completedAt
+    FROM results ORDER BY score DESC, duration_seconds ASC LIMIT ?`;
+  const statement = env.DB.prepare(query);
+  const response = classCode
+    ? await statement.bind(classCode, limit).all<SavedResult>()
+    : await statement.bind(limit).all<SavedResult>();
   return response.results;
 }

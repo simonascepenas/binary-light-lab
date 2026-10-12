@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 const weights = [128, 64, 32, 16, 8, 4, 2, 1];
 const taskBank = {
@@ -25,7 +25,7 @@ type TaskMode = keyof typeof taskBank;
 type Result = { id: number; displayName: string; classCode: string; taskType: TaskMode; level: number; questionsTotal: number; score: number; accuracy: number; durationSeconds: number };
 
 function toBits(value: number) { return value.toString(2).padStart(8, '0').split('').map(Number); }
-function cleanText(value: string) { return value.toUpperCase().replace(/[^\x20-\x7E]/g, '?').slice(0, 36); }
+function cleanText(value: string) { return [...value.toUpperCase()].map((character) => { const code = character.codePointAt(0) ?? 63; return code >= 32 && code <= 126 ? character : '?'; }).join('').slice(0, 36); }
 function toBytes(text: string) { return [...text].map((character) => ({ character, value: character.charCodeAt(0), bits: toBits(character.charCodeAt(0)) })); }
 function formatTime(seconds: number) { return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`; }
 
@@ -70,7 +70,9 @@ export default function Home() {
   const [duration, setDuration] = useState(0);
   const [score, setScore] = useState(0);
   const [leaderboard, setLeaderboard] = useState<Result[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [transitioning, setTransitioning] = useState(false);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const value = useMemo(() => bits.reduce((sum, bit, i) => sum + (bit ? weights[i] : 0), 0), [bits]);
   const tasks = taskBank[mode][level] as readonly (number | string)[];
   const current = tasks[question];
@@ -78,30 +80,43 @@ export default function Home() {
   const convertedBytes = toBytes(cleanText(converterText));
   const accuracy = Math.round((tasks.length / (tasks.length + mistakes)) * 100);
 
-  const loadResults = async () => {
-    try { const response = await fetch('/api/results'); const data = await response.json(); setLeaderboard(data.results ?? []); } catch { setLeaderboard([]); }
+  const loadResults = async (filter = '') => {
+    try { const response = await fetch(`/api/results${filter ? `?classCode=${encodeURIComponent(filter)}` : ''}`); const data = await response.json(); setLeaderboard(data.results ?? []); } catch { setLeaderboard([]); }
   };
-  useEffect(() => { loadResults(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/results').then((response) => response.json()).then((data) => { if (!cancelled) setLeaderboard(data.results ?? []); }).catch(() => { if (!cancelled) setLeaderboard([]); });
+    return () => { cancelled = true; if (advanceTimer.current) clearTimeout(advanceTimer.current); };
+  }, []);
+
+  const resetTransition = () => {
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    advanceTimer.current = null;
+    setTransitioning(false);
+  };
 
   const startTest = (event: FormEvent) => {
     event.preventDefault();
     if (!displayName.trim()) return;
-    setStarted(true); setFinished(false); setQuestion(0); setAnswer(''); setMistakes(0); setFeedback(''); setStartedAt(Date.now());
+    resetTransition(); setStarted(true); setFinished(false); setQuestion(0); setAnswer(''); setMistakes(0); setFeedback(''); setSaveStatus('idle'); setStartedAt(event.timeStamp);
   };
 
-  const finishTest = async () => {
-    const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+  const finishTest = async (completedAt: number) => {
+    const elapsed = Math.max(1, Math.round((completedAt - startedAt) / 1000));
     const finalScore = Math.max(100, 1000 - elapsed - mistakes * 35);
     const finalAccuracy = Math.round((tasks.length / (tasks.length + mistakes)) * 100);
-    setDuration(elapsed); setScore(finalScore); setFinished(true); setSaving(true);
+    setDuration(elapsed); setScore(finalScore); setFinished(true); setSaveStatus('saving');
     try {
-      await fetch('/api/results', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName, classCode, taskType: mode, level, questionsTotal: tasks.length, score: finalScore, accuracy: finalAccuracy, durationSeconds: elapsed, mistakes }) });
-      await loadResults();
-    } finally { setSaving(false); }
+      const response = await fetch('/api/results', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName, classCode, taskType: mode, level, questionsTotal: tasks.length, score: finalScore, accuracy: finalAccuracy, durationSeconds: elapsed, mistakes }) });
+      if (!response.ok) throw new Error('Save failed');
+      setSaveStatus('saved');
+      await loadResults(classCode.trim());
+    } catch { setSaveStatus('error'); }
   };
 
   const submitAnswer = async (event: FormEvent) => {
     event.preventDefault();
+    if (transitioning) return;
     const expected = String(current).toUpperCase().replace(/\s+/g, ' ').trim();
     const response = answer.toUpperCase().replace(/\s+/g, ' ').trim();
     if (response !== expected) {
@@ -109,13 +124,13 @@ export default function Home() {
       setFeedback(mode === 'numbers' ? 'Try again. Add the values below the yellow bulbs.' : 'Try again. Decode each byte, then use the ASCII table.');
       return;
     }
-    setFeedback('Correct.'); setAnswer('');
-    if (question === tasks.length - 1) await finishTest();
-    else setTimeout(() => { setQuestion((currentQuestion) => currentQuestion + 1); setFeedback(''); }, 350);
+    setTransitioning(true); setFeedback('Correct.'); setAnswer('');
+    if (question === tasks.length - 1) await finishTest(event.timeStamp);
+    else advanceTimer.current = setTimeout(() => { setQuestion((currentQuestion) => currentQuestion + 1); setFeedback(''); setTransitioning(false); advanceTimer.current = null; }, 350);
   };
 
-  const chooseMode = (nextMode: TaskMode) => { setMode(nextMode); setStarted(false); setFinished(false); setQuestion(0); setAnswer(''); setFeedback(''); };
-  const chooseLevel = (nextLevel: 1 | 2 | 3) => { setLevel(nextLevel); setStarted(false); setFinished(false); setQuestion(0); setAnswer(''); setFeedback(''); };
+  const chooseMode = (nextMode: TaskMode) => { resetTransition(); setMode(nextMode); setStarted(false); setFinished(false); setQuestion(0); setAnswer(''); setFeedback(''); };
+  const chooseLevel = (nextLevel: 1 | 2 | 3) => { resetTransition(); setLevel(nextLevel); setStarted(false); setFinished(false); setQuestion(0); setAnswer(''); setFeedback(''); };
 
   return <main>
     <header className="topbar">
@@ -148,29 +163,29 @@ export default function Home() {
 
     <section className="tests-section" id="tests">
       <div className="section-heading"><div><span className="step-kicker">03 / TEST</span><h2>Choose one task.</h2></div><p>Pick a task and a level, then decode each set of lamps.</p></div>
-      <div className="task-tabs" role="tablist" aria-label="Test type">
-        {(['numbers','words','sentences'] as TaskMode[]).map((task, index) => <button key={task} className={mode === task ? 'selected' : ''} onClick={() => chooseMode(task)}><span>0{index + 1}</span><strong>{task}</strong><small>{task === 'numbers' ? 'One byte → decimal' : task === 'words' ? 'Bytes → one word' : 'Bytes → one sentence'}</small></button>)}
+      <div className="task-tabs" role="group" aria-label="Test type">
+        {(['numbers','words','sentences'] as TaskMode[]).map((task, index) => <button key={task} aria-pressed={mode === task} className={mode === task ? 'selected' : ''} onClick={() => chooseMode(task)}><span>0{index + 1}</span><strong>{task}</strong><small>{task === 'numbers' ? 'One byte → decimal' : task === 'words' ? 'Bytes → one word' : 'Bytes → one sentence'}</small></button>)}
       </div>
       <div className="level-bar"><span>LEVEL</span>{([1,2,3] as const).map((item) => <button key={item} className={level === item ? 'selected' : ''} onClick={() => chooseLevel(item)}>{item}<small>{taskBank[mode][item].length} questions</small></button>)}</div>
 
       {!started ? <form className="start-card" onSubmit={startTest}><div><span className="test-label">{mode.toUpperCase()} · LEVEL {level}</span><h3>{tasks.length} questions</h3><p>{mode === 'numbers' ? 'Decode each byte into a decimal number.' : mode === 'words' ? 'Decode every group of bytes into a word.' : 'Decode each line of bytes into a sentence.'}</p></div><label>Display name or initials<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={32} placeholder="e.g. Ada L." required /></label><label>Class code <small>(optional)</small><input value={classCode} onChange={(e) => setClassCode(e.target.value)} maxLength={20} placeholder="e.g. AI-01" /></label><button className="yellow-button" type="submit">Start test →</button></form>
-      : finished ? <div className="finish-card"><span className="trophy">✓</span><div><span className="step-kicker">TEST COMPLETE</span><h3>{mode} · level {level}</h3><p>{saving ? 'Saving…' : 'Result saved.'}</p></div><div className="finish-stat"><small>SCORE</small><strong>{score}</strong></div><div className="finish-stat"><small>ACCURACY</small><strong>{accuracy}%</strong></div><div className="finish-stat"><small>TIME</small><strong>{formatTime(duration)}</strong></div><button onClick={() => setStarted(false)}>New test</button></div>
+      : finished ? <div className="finish-card"><span className="trophy">✓</span><div><span className="step-kicker">TEST COMPLETE</span><h3>{mode} · level {level}</h3><p role="status">{saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Result saved.' : saveStatus === 'error' ? 'Result could not be saved.' : ''}</p></div><div className="finish-stat"><small>SCORE</small><strong>{score}</strong></div><div className="finish-stat"><small>ACCURACY</small><strong>{accuracy}%</strong></div><div className="finish-stat"><small>TIME</small><strong>{formatTime(duration)}</strong></div><button onClick={() => { resetTransition(); setStarted(false); }}>New test</button></div>
       : <div className="challenge-card">
-        <div className="challenge-head"><div><span>QUESTION {question + 1} / {tasks.length}</span><strong>{mode.toUpperCase()} · LEVEL {level}</strong></div><div className="progress-track"><i style={{ width: `${((question + 1) / tasks.length) * 100}%` }} /></div><div><small>ERRORS</small><b>{mistakes}</b></div></div>
-        <div className={`challenge-bytes ${currentBytes.length > 7 ? 'sentence-bytes' : ''}`}>{currentBytes.map((byte, index) => <div className="byte-challenge" key={`${byte}-${index}`}><ByteDisplay value={byte} compact /><small>{typeof current === 'string' && current[index] === ' ' ? 'SPACE' : `BYTE ${index + 1}`}</small></div>)}</div>
-        <form className="answer-form" onSubmit={submitAnswer}><label>{mode === 'numbers' ? 'Decimal number' : mode === 'words' ? 'Hidden word' : 'Hidden sentence'}<div><input value={answer} onChange={(e) => setAnswer(e.target.value)} inputMode={mode === 'numbers' ? 'numeric' : 'text'} autoFocus placeholder="Your answer" /><button type="submit">Check</button></div></label>{feedback && <p className={feedback === 'Correct.' ? 'correct' : 'try-again'}>{feedback}</p>}</form>
+        <div className="challenge-head"><div><span>QUESTION {question + 1} / {tasks.length}</span><strong>{mode.toUpperCase()} · LEVEL {level}</strong></div><div className="progress-track"><i style={{ width: `${(question / tasks.length) * 100}%` }} /></div><div><small>ERRORS</small><b>{mistakes}</b></div></div>
+        <div tabIndex={0} aria-label="Scrollable encoded bytes" className={`challenge-bytes ${currentBytes.length > 7 ? 'sentence-bytes' : ''}`}>{currentBytes.map((byte, index) => <div className="byte-challenge" key={`${byte}-${index}`}><ByteDisplay value={byte} compact /><small>{typeof current === 'string' && current[index] === ' ' ? 'SPACE' : `BYTE ${index + 1}`}</small></div>)}</div>
+        <form className="answer-form" onSubmit={submitAnswer}><label>{mode === 'numbers' ? 'Decimal number' : mode === 'words' ? 'Hidden word' : 'Hidden sentence'}<div><input disabled={transitioning} value={answer} onChange={(e) => setAnswer(e.target.value)} inputMode={mode === 'numbers' ? 'numeric' : 'text'} autoFocus placeholder="Your answer" /><button disabled={transitioning} type="submit">Check</button></div></label>{feedback && <p role="status" aria-live="polite" className={feedback === 'Correct.' ? 'correct' : 'try-again'}>{feedback}</p>}</form>
       </div>}
     </section>
 
     <section className="converter-section" id="converter">
       <div className="section-heading"><div><span className="step-kicker">04 / CREATE</span><h2>Write your own message.</h2></div><p>Type up to 36 printable characters. Each character is translated into its ASCII byte and shown as eight lamps.</p></div>
       <label className="converter-input"><span>YOUR TEXT</span><input value={converterText} onChange={(e) => setConverterText(cleanText(e.target.value))} maxLength={36} placeholder="TYPE SOMETHING." /><small>{converterText.length}/36</small></label>
-      <div className="converter-output">{convertedBytes.length ? convertedBytes.map((byte, index) => <div className="converted-byte" key={`${byte.value}-${index}`}><span className="character-label">{byte.character === ' ' ? 'SPACE' : byte.character}</span><ByteDisplay value={byte.value} compact /><code>{byte.bits.join('')} · {byte.value}</code></div>) : <p>Start typing to light the lamps.</p>}</div>
+      <div className="converter-output" tabIndex={0} aria-label="Scrollable binary translation">{convertedBytes.length ? convertedBytes.map((byte, index) => <div className="converted-byte" key={`${byte.value}-${index}`}><span className="character-label">{byte.character === ' ' ? 'SPACE' : byte.character}</span><ByteDisplay value={byte.value} compact /><code>{byte.bits.join('')} · {byte.value}</code></div>) : <p>Start typing to light the lamps.</p>}</div>
     </section>
 
     <section className="results-section" id="results">
       <div className="section-heading"><div><span className="step-kicker">05 / RESULTS</span><h2>Class performance.</h2></div><p>Every completed test records task, level, score, accuracy, and time.</p></div>
-      <div className="results-card"><div className="results-head"><span>RANK</span><span>STUDENT</span><span>TEST</span><span>LEVEL</span><span>SCORE</span><span>ACCURACY</span><span>TIME</span></div>{leaderboard.length ? leaderboard.map((result, index) => <div className="result-row" key={result.id}><span className={`rank rank-${index + 1}`}>{index + 1}</span><strong>{result.displayName}</strong><span>{result.taskType || 'mixed'}</span><span>{result.level || '—'}</span><b>{result.score}</b><span>{result.accuracy}%</span><span>{formatTime(result.durationSeconds)}</span></div>) : <p className="empty-results">No completed tests yet.</p>}</div>
+      <div className="results-card" tabIndex={0} aria-label="Scrollable class results"><div className="results-head"><span>RANK</span><span>STUDENT</span><span>TEST</span><span>LEVEL</span><span>SCORE</span><span>ACCURACY</span><span>TIME</span></div>{leaderboard.length ? leaderboard.map((result, index) => <div className="result-row" key={result.id}><span className={`rank rank-${index + 1}`}>{index + 1}</span><strong>{result.displayName}</strong><span>{result.taskType || 'mixed'}</span><span>{result.level || '—'}</span><b>{result.score}</b><span>{result.accuracy}%</span><span>{formatTime(result.durationSeconds)}</span></div>) : <p className="empty-results">No completed tests yet.</p>}</div>
     </section>
 
     <footer><div className="brand"><span className="brand-mark">01</span><span><b>Binary Light Lab</b><small>AI Principles &amp; Applications</small></span></div><p>Dr. Simonas Čepėnas · ISM University of Management and Economics</p><a href="#top">Top ↑</a></footer>
