@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { createLatexWorksheet, createPdfWorksheet, saveDownload } from './export-utils';
 
 const weights = [128, 64, 32, 16, 8, 4, 2, 1];
 const taskBank = {
@@ -31,8 +32,8 @@ function formatTime(seconds: number) { return `${Math.floor(seconds / 60)}:${Str
 
 function Bulb({ on, index, onToggle, compact = false }: { on: boolean; index: number; onToggle?: () => void; compact?: boolean }) {
   const contents = <>
-    {Array.from({ length: 8 }, (_, ray) => <span className={`ray ray-${ray + 1}`} key={ray} />)}
-    <span className="bulb-glass"><span className="filament"><i /><i /><i /></span></span>
+    {Array.from({ length: 12 }, (_, ray) => <span className={`ray ray-${ray + 1}`} key={ray} />)}
+    <span className="bulb-glass"><span className="highlight" /><span className="filament"><i /><i /><i /></span></span>
     <span className="bulb-neck" /><span className="bulb-base"><i /><i /><i /></span>
     {!compact && <><strong>{on ? '1' : '0'}</strong><small>{weights[index]}</small></>}
   </>;
@@ -79,6 +80,10 @@ export default function Home() {
   const currentBytes = typeof current === 'number' ? [current] : toBytes(current).map((byte) => byte.value);
   const convertedBytes = toBytes(cleanText(converterText));
   const accuracy = Math.round((tasks.length / (tasks.length + mistakes)) * 100);
+  const exportText = cleanText(converterText);
+
+  const downloadLatex = () => saveDownload(createLatexWorksheet(exportText), 'application/x-tex;charset=utf-8', 'binary-light-worksheet.tex');
+  const downloadPdf = () => saveDownload(createPdfWorksheet(exportText), 'application/pdf', 'binary-light-worksheet.pdf');
 
   const loadResults = async (filter = '') => {
     try { const response = await fetch(`/api/results${filter ? `?classCode=${encodeURIComponent(filter)}` : ''}`); const data = await response.json(); setLeaderboard(data.results ?? []); } catch { setLeaderboard([]); }
@@ -181,6 +186,7 @@ export default function Home() {
       <div className="section-heading"><div><span className="step-kicker">04 / CREATE</span><h2>Write your own message.</h2></div><p>Type up to 36 printable characters. Each character is translated into its ASCII byte and shown as eight lamps.</p></div>
       <label className="converter-input"><span>YOUR TEXT</span><input value={converterText} onChange={(e) => setConverterText(cleanText(e.target.value))} maxLength={36} placeholder="TYPE SOMETHING." /><small>{converterText.length}/36</small></label>
       <div className="converter-output" tabIndex={0} aria-label="Scrollable binary translation">{convertedBytes.length ? convertedBytes.map((byte, index) => <div className="converted-byte" key={`${byte.value}-${index}`}><span className="character-label">{byte.character === ' ' ? 'SPACE' : byte.character}</span><ByteDisplay value={byte.value} compact /><code>{byte.bits.join('')} · {byte.value}</code></div>) : <p>Start typing to light the lamps.</p>}</div>
+      <div className="export-bar"><div><strong>PRINTABLE WORKSHEET</strong><span>The downloads show only the lamps and blank answer lines.</span></div><button disabled={!exportText} onClick={downloadLatex}>Download LaTeX</button><button disabled={!exportText} className="export-primary" onClick={downloadPdf}>Download PDF</button></div>
     </section>
 
     <section className="results-section" id="results">

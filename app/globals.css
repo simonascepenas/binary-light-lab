@@ -36,3 +36,42 @@ body { background-color:#fff; background-image:linear-gradient(var(--grid) 1px,t
 .bulb-row:not(.compact-row) { overflow-x:auto; }
 .start-card input:focus,.answer-form input:focus,.converter-input input:focus,button:focus-visible,[tabindex="0"]:focus-visible { outline:3px solid var(--blue); outline-offset:3px; }
 .answer-form input:disabled,.answer-form button:disabled { cursor:wait; opacity:.65; }
+
+/* TikZ-inspired bulbs: circular globe, 12 light rays, zig-zag filament, screw base */
+.bulb-button { min-width:76px; padding-top:22px; }
+.bulb-glass { z-index:1; }
+.highlight { position:absolute; width:30px; height:17px; left:17px; top:8px; border-top:4px solid transparent; border-radius:50%; transform:rotate(-3deg); }
+.is-on .highlight { border-color:rgba(255,255,255,.92); }
+.filament { width:36px; height:30px; left:14px; right:auto; bottom:6px; display:block; }
+.filament:before,.filament:after { content:''; position:absolute; bottom:-7px; width:2px; height:22px; background:#929292; transform-origin:bottom; }
+.filament:before { left:4px; transform:rotate(-17deg); }
+.filament:after { right:4px; transform:rotate(17deg); }
+.filament i { position:absolute; top:9px; width:14px; height:2px; border:0; background:#929292; transform-origin:left center; }
+.filament i:nth-child(1) { left:3px; transform:rotate(-38deg); }
+.filament i:nth-child(2) { left:13px; top:1px; margin:0; transform:rotate(38deg); }
+.filament i:nth-child(3) { left:23px; margin:0; transform:rotate(-38deg); }
+.is-on .filament i,.is-on .filament:before,.is-on .filament:after { background:#a95c00; }
+.bulb-neck { width:20px; height:9px; z-index:1; }
+.bulb-base { width:42px; height:35px; padding:5px 0; z-index:1; }
+.bulb-base:after { width:18px; height:7px; left:10px; bottom:-9px; }
+.bulb-button>strong { margin-top:17px; }
+.ray { width:2px; height:13px; left:calc(50% - 1px); top:0; transform-origin:1px 56px; }
+.ray-1{transform:rotate(0deg)}.ray-2{transform:rotate(30deg)}.ray-3{transform:rotate(60deg)}.ray-4{transform:rotate(90deg)}.ray-5{transform:rotate(120deg)}.ray-6{transform:rotate(150deg)}.ray-7{transform:rotate(180deg)}.ray-8{transform:rotate(210deg)}.ray-9{transform:rotate(240deg)}.ray-10{transform:rotate(270deg)}.ray-11{transform:rotate(300deg)}.ray-12{transform:rotate(330deg)}
+.bulb-row.compact-row { gap:7px; padding:14px 12px 17px; }
+.bulb-button.compact { min-width:24px; padding-top:7px; }
+.bulb-button.compact .bulb-glass { width:22px; height:22px; }
+.bulb-button.compact .highlight { width:9px; height:5px; left:5px; top:3px; border-top-width:1px; }
+.bulb-button.compact .filament { display:block; width:12px; height:10px; left:4px; bottom:1px; }
+.bulb-button.compact .filament:before,.bulb-button.compact .filament:after { width:1px; height:7px; bottom:-3px; }
+.bulb-button.compact .filament:before { left:1px; }.bulb-button.compact .filament:after { right:1px; }
+.bulb-button.compact .filament i { width:5px; height:1px; top:3px; }
+.bulb-button.compact .filament i:nth-child(1){left:1px}.bulb-button.compact .filament i:nth-child(2){left:4px;top:0}.bulb-button.compact .filament i:nth-child(3){left:8px;top:3px}
+.bulb-button.compact .ray { display:block; width:1px; height:4px; left:calc(50% - .5px); top:0; transform-origin:.5px 18px; }
+.bulb-button.compact .bulb-neck { width:7px; height:3px; }
+.bulb-button.compact .bulb-base { width:14px; height:11px; padding:1px 0; }
+.bulb-button.compact .bulb-base i { display:block; height:1px; }
+.bulb-button.compact .bulb-base:after { display:block; width:6px; height:3px; left:3px; bottom:-4px; border-width:1px; }
+.export-bar { display:flex; align-items:center; gap:12px; padding:17px 20px; border:2px solid var(--ink); border-top:0; background:#fff; color:var(--ink); }
+.export-bar div { display:grid; gap:3px; margin-right:auto; }.export-bar strong { font:900 9px monospace; letter-spacing:.12em; }.export-bar span { color:#666; font:11px Georgia,serif; }
+.export-bar button { padding:11px 15px; border:1px solid var(--ink); background:#fff; font-size:10px; font-weight:900; cursor:pointer; }.export-bar button.export-primary { background:var(--yellow); }.export-bar button:disabled { opacity:.45; cursor:not-allowed; }
+@media(max-width:760px){.bulb-row:not(.compact-row){grid-template-columns:repeat(8,76px)}.export-bar{align-items:stretch;flex-wrap:wrap}.export-bar div{width:100%}.export-bar button{flex:1}}
