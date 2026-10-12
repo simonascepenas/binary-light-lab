@@ -4,6 +4,7 @@ function bitsFor(character: string) {
 
 export type ExportLayout = 'worksheet' | 'coded';
 export type ExportRepresentation = 'bulbs' | 'digits';
+export type AsciiTablePosition = 'none' | 'first' | 'last';
 
 const asciiEntries: Array<[number, string]> = [
   [32, 'SPACE'], [46, '.'],
@@ -18,14 +19,14 @@ function latexEscape(value: string) {
   })[character] ?? character);
 }
 
-function latexAsciiReference() {
+function latexAsciiReference(pageBreakBefore = true) {
   const columns = Array.from({ length: 4 }, (_, column) => asciiEntries.slice(column * 10, column * 10 + 10));
   const rows = Array.from({ length: 10 }, (_, row) => columns.map((column) => {
     const entry = column[row];
     return entry ? `\\textbf{${entry[1]}} & ${entry[0]} & \\texttt{${entry[0].toString(2).padStart(8, '0')}}` : ' & & ';
   }).join(' & ')).join(' \\\\\n');
   return `
-\\newpage
+${pageBreakBefore ? '\\par\\newpage' : ''}
 \\textbf{ASCII Reference}\\hfill {\\color{gray!65}\\footnotesize Prepared by Dr. Simonas Čepėnas}
 
 \\medskip
@@ -33,8 +34,8 @@ function latexAsciiReference() {
 
 \\medskip
 \\begin{center}
-\\renewcommand{\\arraystretch}{1.42}
-{\\scriptsize\\begin{tabular}{@{}rcl@{\\hspace{1.5em}}rcl@{\\hspace{1.5em}}rcl@{\\hspace{1.5em}}rcl@{}}
+\\renewcommand{\\arraystretch}{1.16}
+{\\tiny\\begin{tabular}{@{}rcl@{\\hspace{1em}}rcl@{\\hspace{1em}}rcl@{\\hspace{1em}}rcl@{}}
 {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} & {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} & {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} & {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} \\\\[0.15em]
 ${rows}
 \\end{tabular}}
@@ -42,7 +43,7 @@ ${rows}
 `;
 }
 
-function createCodedLatex(text: string, title: string, includeAsciiTable: boolean, representation: ExportRepresentation) {
+function createCodedLatex(text: string, title: string, asciiTablePosition: AsciiTablePosition, representation: ExportRepresentation) {
   const message = [...text].map((character) => {
     if (character === ' ') return '\\hspace{1.2em}\\allowbreak ';
     const bits = bitsFor(character);
@@ -77,6 +78,8 @@ function createCodedLatex(text: string, title: string, includeAsciiTable: boolea
 \\newcommand{\\PlaceTinyBulb}[2]{\\begin{scope}[xshift=#1 cm,scale=0.045]\\ifnum#2=1\\BulbOn\\else\\BulbOff\\fi\\end{scope}}
 \\newcommand{\\ByteInline}[8]{\\begin{tikzpicture}[baseline=-0.35ex]\\PlaceTinyBulb{0}{#1}\\PlaceTinyBulb{0.12}{#2}\\PlaceTinyBulb{0.24}{#3}\\PlaceTinyBulb{0.36}{#4}\\PlaceTinyBulb{0.48}{#5}\\PlaceTinyBulb{0.60}{#6}\\PlaceTinyBulb{0.72}{#7}\\PlaceTinyBulb{0.84}{#8}\\end{tikzpicture}}
 \\begin{document}
+${asciiTablePosition === 'first' ? `${latexAsciiReference(false)}
+\\newpage` : ''}
 \\textbf{${latexEscape(title)}}\\hfill {\\color{gray!65}\\footnotesize Prepared by Dr. Simonas Čepėnas}
 
 \\medskip
@@ -86,13 +89,13 @@ function createCodedLatex(text: string, title: string, includeAsciiTable: boolea
 \\raggedright
 \\setlength{\\lineskip}{4pt}
 ${message}
-${includeAsciiTable ? latexAsciiReference() : ''}
+${asciiTablePosition === 'last' ? latexAsciiReference() : ''}
 \\end{document}
 `;
 }
 
-export function createLatexWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Binary Code', includeAsciiTable = false, representation: ExportRepresentation = 'bulbs') {
-  if (layout === 'coded') return createCodedLatex(text, title.trim() || 'Binary Code', includeAsciiTable, representation);
+export function createLatexWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Binary Code', asciiTablePosition: AsciiTablePosition = 'none', representation: ExportRepresentation = 'bulbs') {
+  if (layout === 'coded') return createCodedLatex(text, title.trim() || 'Binary Code', asciiTablePosition, representation);
   const rows = [...text].map((character, index) => {
     const bits = bitsFor(character);
     return representation === 'bulbs'
@@ -134,6 +137,8 @@ export function createLatexWorksheet(text: string, layout: ExportLayout = 'works
 \\newcommand{\\ByteRow}[8]{\\begin{tikzpicture}[baseline=-2pt]\\PlaceBulb{0}{#1}\\PlaceBulb{0.93}{#2}\\PlaceBulb{1.86}{#3}\\PlaceBulb{2.79}{#4}\\PlaceBulb{3.72}{#5}\\PlaceBulb{4.65}{#6}\\PlaceBulb{5.58}{#7}\\PlaceBulb{6.51}{#8}\\end{tikzpicture}}
 
 \\begin{document}
+${asciiTablePosition === 'first' ? `${latexAsciiReference(false)}
+\\newpage` : ''}
 {\\Large\\textbf{${latexEscape(title.trim() || 'Binary Code')}}}\\hfill {\\color{gray!65}\\footnotesize Prepared by Dr. Simonas Čepėnas}
 
 \\medskip
@@ -150,7 +155,7 @@ ${rows}
 
 \\vfill
 \\textbf{Hidden message:} \\rule{0.72\\linewidth}{0.8pt}
-${includeAsciiTable ? latexAsciiReference() : ''}
+${asciiTablePosition === 'last' ? latexAsciiReference() : ''}
 \\end{document}
 `;
 }
@@ -281,7 +286,7 @@ function asciiReferencePageStream() {
     stream += pdfText('BINARY', x + 68, 750, 7, true, false, 0.48);
     stream += `0.72 0.74 0.78 RG 0.45 w ${x} 742 m ${x + 118} 742 l S\n`;
     column.forEach(([decimal, character], rowIndex) => {
-      const y = 721 - rowIndex * 29;
+      const y = 721 - rowIndex * 21;
       stream += pdfText(character, x + 5, y, 8, true);
       stream += pdfText(String(decimal), x + 39, y, 8, false, true, 0.35);
       stream += pdfText(decimal.toString(2).padStart(8, '0'), x + 68, y, 7);
@@ -290,13 +295,14 @@ function asciiReferencePageStream() {
   return stream;
 }
 
-export function createPdfWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Binary Code', includeAsciiTable = false, representation: ExportRepresentation = 'bulbs') {
+export function createPdfWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Binary Code', asciiTablePosition: AsciiTablePosition = 'none', representation: ExportRepresentation = 'bulbs') {
   const characters = [...text];
   const worksheetPageCount = Math.ceil(characters.length / 9);
   const pageStreams = layout === 'coded'
     ? codedPageStreams(text, title.trim() || 'Binary Code', representation)
     : Array.from({ length: worksheetPageCount }, (_, index) => pageStream(characters.slice(index * 9, index * 9 + 9), index, representation, title.trim() || 'Binary Code'));
-  if (includeAsciiTable) pageStreams.push(asciiReferencePageStream());
+  if (asciiTablePosition === 'first') pageStreams.unshift(asciiReferencePageStream());
+  if (asciiTablePosition === 'last') pageStreams.push(asciiReferencePageStream());
   const objects: string[] = ['', '', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>'];
   const pageReferences: number[] = [];
   pageStreams.forEach((pageStreamContent, pageIndex) => {

@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { createLatexWorksheet, createPdfWorksheet, saveDownload, type ExportLayout, type ExportRepresentation } from './export-utils';
+import { createLatexWorksheet, createPdfWorksheet, saveDownload, type AsciiTablePosition, type ExportLayout, type ExportRepresentation } from './export-utils';
 
 const weights = [128, 64, 32, 16, 8, 4, 2, 1];
 const taskBank = {
@@ -64,7 +64,7 @@ export default function Home() {
   const [converterText, setConverterText] = useState('HELLO.');
   const [exportLayout, setExportLayout] = useState<ExportLayout>('worksheet');
   const [documentTitle, setDocumentTitle] = useState('Binary Code');
-  const [includeAsciiTable, setIncludeAsciiTable] = useState(true);
+  const [asciiTablePosition, setAsciiTablePosition] = useState<AsciiTablePosition>('last');
   const [exportRepresentation, setExportRepresentation] = useState<ExportRepresentation>('bulbs');
   const [displayName, setDisplayName] = useState('');
   const [classCode, setClassCode] = useState('');
@@ -106,8 +106,8 @@ export default function Home() {
   const exportText = cleanText(converterText);
 
   const exportName = exportLayout === 'worksheet' ? 'binary-light-worksheet' : 'binary-light-coded-text';
-  const downloadLatex = () => saveDownload(createLatexWorksheet(exportText, exportLayout, documentTitle, includeAsciiTable, exportRepresentation), 'application/x-tex;charset=utf-8', `${exportName}.tex`);
-  const downloadPdf = () => saveDownload(createPdfWorksheet(exportText, exportLayout, documentTitle, includeAsciiTable, exportRepresentation), 'application/pdf', `${exportName}.pdf`);
+  const downloadLatex = () => saveDownload(createLatexWorksheet(exportText, exportLayout, documentTitle, asciiTablePosition, exportRepresentation), 'application/x-tex;charset=utf-8', `${exportName}.tex`);
+  const downloadPdf = () => saveDownload(createPdfWorksheet(exportText, exportLayout, documentTitle, asciiTablePosition, exportRepresentation), 'application/pdf', `${exportName}.pdf`);
 
   const loadResults = async (filter = '') => {
     try { const response = await fetch(`/api/results${filter ? `?classCode=${encodeURIComponent(filter)}` : ''}`); const data = await response.json(); setLeaderboard(data.results ?? []); } catch { setLeaderboard([]); }
@@ -289,12 +289,12 @@ export default function Home() {
       <label className="converter-input"><span>YOUR TEXT</span><textarea value={converterText} onChange={(e) => setConverterText(e.target.value)} rows={4} placeholder="TYPE AS MANY SENTENCES AS YOU NEED." /><small>{converterText.length} characters</small></label>
       <div className="format-bar" role="group" aria-label="Message format"><span>FORMAT</span><button type="button" className={exportLayout === 'worksheet' ? 'selected' : ''} aria-pressed={exportLayout === 'worksheet'} onClick={() => setExportLayout('worksheet')}><strong>Task worksheet</strong><small>One byte per row + answer lines</small></button><button type="button" className={exportLayout === 'coded' ? 'selected' : ''} aria-pressed={exportLayout === 'coded'} onClick={() => setExportLayout('coded')}><strong>Coded text</strong><small>Small bytes that wrap like sentences</small></button></div>
       <div className="representation-bar" role="group" aria-label="Code representation"><span>DISPLAY</span><button type="button" className={exportRepresentation === 'bulbs' ? 'selected' : ''} aria-pressed={exportRepresentation === 'bulbs'} onClick={() => setExportRepresentation('bulbs')}><strong>{exportRepresentation === 'bulbs' ? '✓ ' : ''}Lightbulbs</strong><small>Yellow and white lamps</small></button><button type="button" className={exportRepresentation === 'digits' ? 'selected' : ''} aria-pressed={exportRepresentation === 'digits'} onClick={() => setExportRepresentation('digits')}><strong>{exportRepresentation === 'digits' ? '✓ ' : ''}1s and 0s</strong><small>Eight binary digits per character</small></button></div>
-      <div className="reference-bar" role="group" aria-label="ASCII reference in download"><span>REFERENCE</span><button type="button" className={includeAsciiTable ? 'selected' : ''} aria-pressed={includeAsciiTable} onClick={() => setIncludeAsciiTable(true)}><strong>{includeAsciiTable ? '✓ ' : ''}Include ASCII table</strong><small>Adds one page to PDF and LaTeX</small></button><button type="button" className={!includeAsciiTable ? 'selected' : ''} aria-pressed={!includeAsciiTable} onClick={() => setIncludeAsciiTable(false)}><strong>{!includeAsciiTable ? '✓ ' : ''}No ASCII table</strong><small>Code only</small></button></div>
+      <div className="reference-bar" role="group" aria-label="ASCII reference position in download"><span>ASCII TABLE</span><button type="button" className={asciiTablePosition === 'none' ? 'selected' : ''} aria-pressed={asciiTablePosition === 'none'} onClick={() => setAsciiTablePosition('none')}><strong>{asciiTablePosition === 'none' ? '✓ ' : ''}No table</strong><small>Code only</small></button><button type="button" className={asciiTablePosition === 'first' ? 'selected' : ''} aria-pressed={asciiTablePosition === 'first'} onClick={() => setAsciiTablePosition('first')}><strong>{asciiTablePosition === 'first' ? '✓ ' : ''}First page</strong><small>Reference before the activity</small></button><button type="button" className={asciiTablePosition === 'last' ? 'selected' : ''} aria-pressed={asciiTablePosition === 'last'} onClick={() => setAsciiTablePosition('last')}><strong>{asciiTablePosition === 'last' ? '✓ ' : ''}Last page</strong><small>Reference after the activity</small></button></div>
       <label className="document-title"><span>DOCUMENT TITLE</span><input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} maxLength={80} placeholder="Binary Code" /></label>
       {exportLayout === 'worksheet'
         ? <div className="converter-output" tabIndex={0} aria-label="Scrollable binary translation">{convertedBytes.length ? convertedBytes.map((byte, index) => <div className="converted-byte" key={`${byte.value}-${index}`}><span className="character-label">{byte.character === ' ' ? 'SPACE' : byte.character}</span>{exportRepresentation === 'bulbs' ? <ByteDisplay value={byte.value} compact /> : <code className="binary-byte">{byte.bits.join('')}</code>}<code>{byte.bits.join('')} · {byte.value}</code></div>) : <p>Start typing to encode your message.</p>}</div>
         : <div className="converter-output coded-output" tabIndex={0} aria-label="Coded text preview">{codedWords.length ? <div className={`coded-message ${exportRepresentation === 'digits' ? 'digit-message' : ''}`}>{codedWords.map((word, wordIndex) => <span className={`coded-word ${exportRepresentation === 'digits' ? 'digit-word' : ''}`} key={`${word}-${wordIndex}`}>{[...word].map((character, characterIndex) => exportRepresentation === 'bulbs' ? <ByteDisplay key={`${character}-${characterIndex}`} value={character.charCodeAt(0)} micro /> : <code className="inline-binary" key={`${character}-${characterIndex}`}>{toBits(character.charCodeAt(0)).join('')}</code>)}</span>)}</div> : <p>Start typing to encode your message.</p>}</div>}
-      <div className="export-bar"><div><strong>{exportLayout === 'worksheet' ? 'TASK WORKSHEET' : 'CODED TEXT'} · {exportRepresentation === 'bulbs' ? 'LIGHTBULBS' : '1S AND 0S'} · {includeAsciiTable ? 'ASCII TABLE INCLUDED' : 'NO ASCII TABLE'}</strong><span>{exportLayout === 'worksheet' ? 'One byte per row with blank answer lines.' : exportRepresentation === 'bulbs' ? 'Small bulb-bytes flow and wrap like regular text.' : 'Binary bytes flow and wrap like regular text.'}</span></div><button type="button" disabled={!exportText} onClick={downloadLatex}>Download LaTeX</button><button type="button" disabled={!exportText} className="export-primary" onClick={downloadPdf}>Download PDF</button></div>
+      <div className="export-bar"><div><strong>{exportLayout === 'worksheet' ? 'TASK WORKSHEET' : 'CODED TEXT'} · {exportRepresentation === 'bulbs' ? 'LIGHTBULBS' : '1S AND 0S'} · {asciiTablePosition === 'none' ? 'NO ASCII TABLE' : `ASCII TABLE · ${asciiTablePosition.toUpperCase()} PAGE`}</strong><span>{exportLayout === 'worksheet' ? 'One byte per row with blank answer lines.' : exportRepresentation === 'bulbs' ? 'Small bulb-bytes flow and wrap like regular text.' : 'Binary bytes flow and wrap like regular text.'}</span></div><button type="button" disabled={!exportText} onClick={downloadLatex}>Download LaTeX</button><button type="button" disabled={!exportText} className="export-primary" onClick={downloadPdf}>Download PDF</button></div>
     </section>
 
     <section className="results-section" id="results">
