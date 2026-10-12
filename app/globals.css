@@ -87,3 +87,6 @@ body { background-color:#fff; background-image:linear-gradient(var(--grid) 1px,t
 .bulb-button.compact .ray { transform-origin:.5px 16px; }
 .bulb-button.compact .bulb-base { width:12px; height:9px; }
 .bulb-button.compact .bulb-base:after { width:5px; left:2px; }
+.converter-input textarea { min-height:112px; padding:17px 14px; border:0; border-left:2px solid var(--ink); border-radius:0; outline:none; resize:vertical; background:var(--paper); font:800 17px/1.5 monospace; text-transform:uppercase; }
+.converter-input textarea:focus { outline:3px solid var(--blue); outline-offset:-3px; }
+@media(max-width:760px){.converter-input textarea{grid-column:1/-1;border-left:0}.converter-input small{padding:10px 14px}}

@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createLatexWorksheet, createPdfWorksheet, saveDownload } from './export-utils';
 
 const weights = [128, 64, 32, 16, 8, 4, 2, 1];
@@ -26,7 +26,7 @@ type TaskMode = keyof typeof taskBank;
 type Result = { id: number; displayName: string; classCode: string; taskType: TaskMode; level: number; questionsTotal: number; score: number; accuracy: number; durationSeconds: number };
 
 function toBits(value: number) { return value.toString(2).padStart(8, '0').split('').map(Number); }
-function cleanText(value: string) { return [...value.toUpperCase()].map((character) => { const code = character.codePointAt(0) ?? 63; return code >= 32 && code <= 126 ? character : '?'; }).join('').slice(0, 36); }
+function cleanText(value: string) { return [...value.toUpperCase()].map((character) => { if (/\s/.test(character)) return ' '; const code = character.codePointAt(0) ?? 63; return code >= 32 && code <= 126 ? character : '?'; }).join(''); }
 function toBytes(text: string) { return [...text].map((character) => ({ character, value: character.charCodeAt(0), bits: toBits(character.charCodeAt(0)) })); }
 function formatTime(seconds: number) { return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`; }
 
@@ -74,11 +74,12 @@ export default function Home() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [transitioning, setTransitioning] = useState(false);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deferredConverterText = useDeferredValue(converterText);
   const value = useMemo(() => bits.reduce((sum, bit, i) => sum + (bit ? weights[i] : 0), 0), [bits]);
   const tasks = taskBank[mode][level] as readonly (number | string)[];
   const current = tasks[question];
   const currentBytes = typeof current === 'number' ? [current] : toBytes(current).map((byte) => byte.value);
-  const convertedBytes = toBytes(cleanText(converterText));
+  const convertedBytes = toBytes(cleanText(deferredConverterText));
   const accuracy = Math.round((tasks.length / (tasks.length + mistakes)) * 100);
   const exportText = cleanText(converterText);
 
@@ -183,8 +184,8 @@ export default function Home() {
     </section>
 
     <section className="converter-section" id="converter">
-      <div className="section-heading"><div><span className="step-kicker">04 / CREATE</span><h2>Write your own message.</h2></div><p>Type up to 36 printable characters. Each character is translated into its ASCII byte and shown as eight lamps.</p></div>
-      <label className="converter-input"><span>YOUR TEXT</span><input value={converterText} onChange={(e) => setConverterText(cleanText(e.target.value))} maxLength={36} placeholder="TYPE SOMETHING." /><small>{converterText.length}/36</small></label>
+      <div className="section-heading"><div><span className="step-kicker">04 / CREATE</span><h2>Write your own message.</h2></div><p>Write as many sentences as you need. Each character is translated into its ASCII byte and shown as eight lamps.</p></div>
+      <label className="converter-input"><span>YOUR TEXT</span><textarea value={converterText} onChange={(e) => setConverterText(e.target.value)} rows={4} placeholder="TYPE AS MANY SENTENCES AS YOU NEED." /><small>{converterText.length} characters</small></label>
       <div className="converter-output" tabIndex={0} aria-label="Scrollable binary translation">{convertedBytes.length ? convertedBytes.map((byte, index) => <div className="converted-byte" key={`${byte.value}-${index}`}><span className="character-label">{byte.character === ' ' ? 'SPACE' : byte.character}</span><ByteDisplay value={byte.value} compact /><code>{byte.bits.join('')} · {byte.value}</code></div>) : <p>Start typing to light the lamps.</p>}</div>
       <div className="export-bar"><div><strong>PRINTABLE WORKSHEET</strong><span>The downloads show only the lamps and blank answer lines.</span></div><button disabled={!exportText} onClick={downloadLatex}>Download LaTeX</button><button disabled={!exportText} className="export-primary" onClick={downloadPdf}>Download PDF</button></div>
     </section>
