@@ -3,6 +3,7 @@ function bitsFor(character: string) {
 }
 
 export type ExportLayout = 'worksheet' | 'coded';
+export type ExportRepresentation = 'bulbs' | 'digits';
 
 const asciiEntries: Array<[number, string]> = [
   [32, 'SPACE'], [46, '.'],
@@ -42,10 +43,13 @@ ${rows}
 `;
 }
 
-function createCodedLatex(text: string, title: string, includeAsciiTable: boolean) {
+function createCodedLatex(text: string, title: string, includeAsciiTable: boolean, representation: ExportRepresentation) {
   const message = [...text].map((character) => {
     if (character === ' ') return '\\hspace{1.2em}\\allowbreak ';
-    return `\\ByteInline{${bitsFor(character).join('}{')}}\\hspace{0.08em}\\allowbreak `;
+    const bits = bitsFor(character);
+    return representation === 'bulbs'
+      ? `\\ByteInline{${bits.join('}{')}}\\hspace{0.08em}\\allowbreak `
+      : `\\texttt{\\textbf{${bits.join('')}}}\\hspace{0.35em}\\allowbreak `;
   }).join('');
 
   return `\\documentclass[11pt,a4paper]{article}
@@ -77,7 +81,7 @@ function createCodedLatex(text: string, title: string, includeAsciiTable: boolea
 \\textbf{${latexEscape(title)}}\\hfill Dr. Simonas Čepėnas
 
 \\medskip
-{\\tiny Yellow is ON (1); white is OFF (0). Each compact group of eight bulbs is one ASCII character.}
+{\\tiny ${representation === 'bulbs' ? 'Yellow is ON (1); white is OFF (0). Each compact group of eight bulbs is one ASCII character.' : 'Each compact group of eight binary digits is one ASCII character.'}}
 
 \\bigskip
 \\raggedright
@@ -88,11 +92,13 @@ ${includeAsciiTable ? latexAsciiReference() : ''}
 `;
 }
 
-export function createLatexWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Oscar Brown Jr., The Snake', includeAsciiTable = false) {
-  if (layout === 'coded') return createCodedLatex(text, title.trim() || 'Coded Binary Text', includeAsciiTable);
+export function createLatexWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Binary Code', includeAsciiTable = false, representation: ExportRepresentation = 'bulbs') {
+  if (layout === 'coded') return createCodedLatex(text, title.trim() || 'Binary Code', includeAsciiTable, representation);
   const rows = [...text].map((character, index) => {
-    const bits = bitsFor(character).join('}{');
-    return `\\textbf{${index + 1}:} \\quad \\ByteRow{${bits}} & Binary: \\rule{0.62\\linewidth}{0.5pt}\\\\[-0.25em]\n& Decimal: \\rule{0.58\\linewidth}{0.5pt}\\\\[-0.25em]\n& ASCII character: \\rule{0.48\\linewidth}{0.5pt}\\\\[0.2em]`;
+    const bits = bitsFor(character);
+    return representation === 'bulbs'
+      ? `\\textbf{${index + 1}:} \\quad \\ByteRow{${bits.join('}{')}} & Binary: \\rule{0.62\\linewidth}{0.5pt}\\\\[-0.25em]\n& Decimal: \\rule{0.58\\linewidth}{0.5pt}\\\\[-0.25em]\n& ASCII character: \\rule{0.48\\linewidth}{0.5pt}\\\\[0.2em]`
+      : `\\textbf{${index + 1}:} \\quad \\fbox{\\strut\\texttt{\\textbf{${bits.join('')}}}} & Decimal: \\rule{0.58\\linewidth}{0.5pt}\\\\[-0.1em]\n& ASCII character: \\rule{0.48\\linewidth}{0.5pt}\\\\[1em]`;
   }).join('\n');
 
   return `\\documentclass[11pt,a4paper]{article}
@@ -129,10 +135,10 @@ export function createLatexWorksheet(text: string, layout: ExportLayout = 'works
 \\newcommand{\\ByteRow}[8]{\\begin{tikzpicture}[baseline=-2pt]\\PlaceBulb{0}{#1}\\PlaceBulb{0.93}{#2}\\PlaceBulb{1.86}{#3}\\PlaceBulb{2.79}{#4}\\PlaceBulb{3.72}{#5}\\PlaceBulb{4.65}{#6}\\PlaceBulb{5.58}{#7}\\PlaceBulb{6.51}{#8}\\end{tikzpicture}}
 
 \\begin{document}
-{\\Large\\textbf{Binary Light Worksheet}}\\hfill Dr. Simonas Čepėnas
+{\\Large\\textbf{${representation === 'bulbs' ? 'Binary Light Worksheet' : 'Binary Code Worksheet'}}}\\hfill Dr. Simonas Čepėnas
 
 \\medskip
-Yellow is ON (1); white is OFF (0). Read each byte from MSB to LSB, convert it to decimal, then use ASCII to reveal the message.
+${representation === 'bulbs' ? 'Yellow is ON (1); white is OFF (0). Read each byte from MSB to LSB, convert it to decimal, then use ASCII to reveal the message.' : 'Read each 8-bit byte from MSB to LSB, convert it to decimal, then use ASCII to reveal the message.'}
 
 \\medskip
 \\textbf{MSB $\\rightarrow$ LSB:} 128, 64, 32, 16, 8, 4, 2, 1
@@ -154,8 +160,8 @@ function pdfEscape(value: string) {
   return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
-function pdfText(value: string, x: number, y: number, size = 10, bold = false) {
-  return `0 0 0 rg BT /${bold ? 'F2' : 'F1'} ${size} Tf ${x} ${y} Td (${pdfEscape(value)}) Tj ET\n`;
+function pdfText(value: string, x: number, y: number, size = 10, bold = false, mono = false) {
+  return `0 0 0 rg BT /${mono ? 'F3' : bold ? 'F2' : 'F1'} ${size} Tf ${x} ${y} Td (${pdfEscape(value)}) Tj ET\n`;
 }
 
 function circlePath(x: number, y: number, radius: number) {
@@ -196,17 +202,23 @@ function pdfMicroBulb(x: number, y: number, on: boolean) {
   return commands;
 }
 
-function pageStream(characters: string[], pageIndex: number) {
-  let stream = pdfText('BINARY LIGHT WORKSHEET', 40, 805, 17, true);
-  stream += pdfText('Yellow = ON (1)   White = OFF (0)   Read each byte from MSB to LSB.', 40, 783, 9);
+function pageStream(characters: string[], pageIndex: number, representation: ExportRepresentation) {
+  let stream = pdfText(representation === 'bulbs' ? 'BINARY LIGHT WORKSHEET' : 'BINARY CODE WORKSHEET', 40, 805, 17, true);
+  stream += pdfText(representation === 'bulbs' ? 'Yellow = ON (1)   White = OFF (0)   Read each byte from MSB to LSB.' : 'Read each 8-bit binary byte from MSB to LSB.', 40, 783, 9);
   stream += pdfText('Place values: 128   64   32   16   8   4   2   1', 40, 766, 9, true);
   characters.forEach((character, row) => {
     const y = 718 - row * 72;
     stream += pdfText(String(pageIndex * 9 + row + 1) + '.', 42, y - 2, 10, true);
-    bitsFor(character).forEach((bit, index) => { stream += pdfBulb(70 + index * 31, y, Boolean(bit)); });
-    stream += pdfText('Binary: __________________', 335, y + 13, 8);
-    stream += pdfText('Decimal: ________________', 335, y - 1, 8);
-    stream += pdfText('ASCII: ___________________', 335, y - 15, 8);
+    if (representation === 'bulbs') {
+      bitsFor(character).forEach((bit, index) => { stream += pdfBulb(70 + index * 31, y, Boolean(bit)); });
+      stream += pdfText('Binary: __________________', 335, y + 13, 8);
+      stream += pdfText('Decimal: ________________', 335, y - 1, 8);
+      stream += pdfText('ASCII: ___________________', 335, y - 15, 8);
+    } else {
+      stream += pdfText(bitsFor(character).join(''), 70, y - 4, 18, false, true);
+      stream += pdfText('Decimal: ________________', 335, y + 7, 8);
+      stream += pdfText('ASCII: ___________________', 335, y - 8, 8);
+    }
   });
   stream += pdfText('Hidden message: _______________________________________________', 40, 44, 10, true);
   return stream;
@@ -223,18 +235,18 @@ function pdfAuthorName(x: number, y: number, size = 9) {
   return commands;
 }
 
-function codedPageStreams(text: string, title: string) {
+function codedPageStreams(text: string, title: string, representation: ExportRepresentation) {
   const streams: string[] = [];
   let stream = '';
   let x = 40;
   let y = 760;
-  const byteWidth = 29;
+  const byteWidth = representation === 'bulbs' ? 29 : 45;
   const wordGap = 12;
   const lineHeight = 18;
   const startPage = () => {
     stream = pdfText(title.slice(0, 52), 40, 805, 12, true);
     stream += pdfAuthorName(466, 805, 9);
-    stream += pdfText('Yellow is ON (1); white is OFF (0). Each compact group of eight bulbs is one ASCII character.', 40, 784, 7);
+    stream += pdfText(representation === 'bulbs' ? 'Yellow is ON (1); white is OFF (0). Each compact group of eight bulbs is one ASCII character.' : 'Each compact group of eight binary digits is one ASCII character.', 40, 784, 7);
     x = 40; y = 750;
   };
   const finishPage = () => { streams.push(stream); startPage(); };
@@ -246,7 +258,8 @@ function codedPageStreams(text: string, title: string) {
     [...word].forEach((character) => {
       if (x + byteWidth > 555) { x = 40; y -= lineHeight; }
       if (y < 55) finishPage();
-      bitsFor(character).forEach((bit, index) => { stream += pdfMicroBulb(x + 2 + index * 3.25, y, Boolean(bit)); });
+      if (representation === 'bulbs') bitsFor(character).forEach((bit, index) => { stream += pdfMicroBulb(x + 2 + index * 3.25, y, Boolean(bit)); });
+      else stream += pdfText(bitsFor(character).join(''), x, y - 2, 8, false, true);
       x += byteWidth;
     });
     if (wordIndex < words.length - 1) x += wordGap;
@@ -277,21 +290,21 @@ function asciiReferencePageStream() {
   return stream;
 }
 
-export function createPdfWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Oscar Brown Jr., The Snake', includeAsciiTable = false) {
+export function createPdfWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Binary Code', includeAsciiTable = false, representation: ExportRepresentation = 'bulbs') {
   const characters = [...text];
   const worksheetPageCount = Math.ceil(characters.length / 9);
   const pageStreams = layout === 'coded'
-    ? codedPageStreams(text, title.trim() || 'Coded Binary Text')
-    : Array.from({ length: worksheetPageCount }, (_, index) => pageStream(characters.slice(index * 9, index * 9 + 9), index));
+    ? codedPageStreams(text, title.trim() || 'Binary Code', representation)
+    : Array.from({ length: worksheetPageCount }, (_, index) => pageStream(characters.slice(index * 9, index * 9 + 9), index, representation));
   if (includeAsciiTable) pageStreams.push(asciiReferencePageStream());
-  const objects: string[] = ['', '', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'];
+  const objects: string[] = ['', '', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>'];
   const pageReferences: number[] = [];
   pageStreams.forEach((pageStreamContent, pageIndex) => {
     const stream = pageStreamContent + pdfText(`Page ${pageIndex + 1} of ${pageStreams.length}`, 500, 22, 8);
     const contentReference = objects.length;
     objects.push(`<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}endstream`);
     const pageReference = objects.length;
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentReference} 0 R >>`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents ${contentReference} 0 R >>`);
     pageReferences.push(pageReference);
   });
   objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
