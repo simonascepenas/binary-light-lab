@@ -1,8 +1,13 @@
 'use client';
 
 import { FormEvent, Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import Image from 'next/image';
 import { createLatexWorksheet, createPdfWorksheet, saveDownload, type AsciiTablePosition, type ExportLayout, type ExportRepresentation } from './export-utils';
+
+const DATABASE_SITE_ORIGIN = 'https://binary-light-lab.workspace-404564.chatgpt.site';
+function apiUrl(path: string) {
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('github.io')) return `${DATABASE_SITE_ORIGIN}${path}`;
+  return path;
+}
 
 const weights = [128, 64, 32, 16, 8, 4, 2, 1];
 const taskBank = {
@@ -111,11 +116,11 @@ export default function Home() {
   const downloadPdf = () => saveDownload(createPdfWorksheet(exportText, exportLayout, documentTitle, asciiTablePosition, exportRepresentation), 'application/pdf', `${exportName}.pdf`);
 
   const loadResults = async (filter = '') => {
-    try { const response = await fetch(`/api/results${filter ? `?classCode=${encodeURIComponent(filter)}` : ''}`); const data = await response.json(); setLeaderboard(data.results ?? []); } catch { setLeaderboard([]); }
+    try { const response = await fetch(apiUrl(`/api/results${filter ? `?classCode=${encodeURIComponent(filter)}` : ''}`)); const data = await response.json(); setLeaderboard(data.results ?? []); } catch { setLeaderboard([]); }
   };
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/results').then((response) => response.json()).then((data) => { if (!cancelled) setLeaderboard(data.results ?? []); }).catch(() => { if (!cancelled) setLeaderboard([]); });
+    fetch(apiUrl('/api/results')).then((response) => response.json()).then((data) => { if (!cancelled) setLeaderboard(data.results ?? []); }).catch(() => { if (!cancelled) setLeaderboard([]); });
     return () => { cancelled = true; if (advanceTimer.current) clearTimeout(advanceTimer.current); };
   }, []);
 
@@ -179,7 +184,7 @@ export default function Home() {
     let cancelled = false;
     const refresh = async () => {
       try {
-        const response = await fetch(`/api/sessions?code=${encodeURIComponent(teacherSession.code)}&teacherToken=${encodeURIComponent(teacherSession.teacherToken)}`);
+        const response = await fetch(apiUrl(`/api/sessions?code=${encodeURIComponent(teacherSession.code)}&teacherToken=${encodeURIComponent(teacherSession.teacherToken)}`));
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? 'Report unavailable.');
         if (!cancelled) { setSessionStudents(data.students ?? []); setTeacherStatus('Live report updated.'); }
@@ -193,7 +198,7 @@ export default function Home() {
   const createClassroomSession = async (event: FormEvent) => {
     event.preventDefault(); setTeacherStatus('Creating session…');
     try {
-      const response = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create', title: sessionTitle, taskType: sessionTask, level: sessionLevel }) });
+      const response = await fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create', title: sessionTitle, taskType: sessionTask, level: sessionLevel }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Could not create the session.');
       const created = data.session as TeacherSession;
@@ -206,7 +211,7 @@ export default function Home() {
     event.preventDefault(); setTeacherStatus('Opening dashboard…');
     try {
       const code = restoreCode.trim().toUpperCase(); const teacherToken = restoreKey.trim();
-      const response = await fetch(`/api/sessions?code=${encodeURIComponent(code)}&teacherToken=${encodeURIComponent(teacherToken)}`);
+      const response = await fetch(apiUrl(`/api/sessions?code=${encodeURIComponent(code)}&teacherToken=${encodeURIComponent(teacherToken)}`));
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Could not open the dashboard.');
       const restored = { ...data.session, teacherToken } as TeacherSession;
@@ -218,7 +223,7 @@ export default function Home() {
   const joinClassroomSession = async (event: FormEvent) => {
     event.preventDefault(); setJoinStatus('Joining session…');
     try {
-      const response = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'join', code: joinCode, displayName: joinName }) });
+      const response = await fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'join', code: joinCode, displayName: joinName }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Could not join the session.');
       const joined = data.session as ClassroomSession;
@@ -252,7 +257,7 @@ export default function Home() {
     const finalAccuracy = Math.round((tasks.length / (tasks.length + mistakes)) * 100);
     setDuration(elapsed); setScore(finalScore); setFinished(true); setSaveStatus('saving');
     try {
-      const response = await fetch('/api/results', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName, classCode, taskType: mode, level, questionsTotal: tasks.length, score: finalScore, accuracy: finalAccuracy, durationSeconds: elapsed, mistakes }) });
+      const response = await fetch(apiUrl('/api/results'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName, classCode, taskType: mode, level, questionsTotal: tasks.length, score: finalScore, accuracy: finalAccuracy, durationSeconds: elapsed, mistakes }) });
       if (!response.ok) throw new Error('Save failed');
       setSaveStatus('saved');
       await loadResults(classCode.trim());
@@ -349,7 +354,9 @@ export default function Home() {
     </section>
 
     <section className="author-section" id="about">
-      <div className="author-photo"><Image src="/author-simonas-cepenas.webp" alt="Dr. Simonas Čepėnas" width={1500} height={1000} /></div>
+      {/* A relative native image path works on both the root Site and GitHub Pages subpath. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <div className="author-photo"><img src="author-simonas-cepenas.webp" alt="Dr. Simonas Čepėnas" width={1500} height={1000} /></div>
       <div className="author-copy"><span className="step-kicker">07 / AUTHOR</span><h2>Dr. Simonas Čepėnas</h2><p>Dr. Simonas Čepėnas earned his PhD in Foreign Affairs and Methods from the University of Virginia. He teaches subjects spanning mathematics, statistics, data science, artificial intelligence, economics, and politics.</p><p>Outside the classroom, he is a husband and the father of two wonderful children.</p><div className="author-fields">MATHEMATICS · STATISTICS · DATA SCIENCE · AI · ECONOMICS · POLITICS</div></div>
     </section>
 
