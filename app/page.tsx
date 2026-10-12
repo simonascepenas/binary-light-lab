@@ -122,9 +122,41 @@ export default function Home() {
   useEffect(() => {
     const sectionIds = ['learn', 'ascii', 'tests', 'converter', 'results', 'classroom', 'about'];
     const updateActiveSection = () => {
-      const marker = window.scrollY + 120;
-      const current = sectionIds.filter((id) => { const section = document.getElementById(id); return section && section.offsetTop <= marker; }).at(-1) ?? '';
-      setActiveSection(current);
+      if (window.scrollY < 48) {
+        setActiveSection('');
+        return;
+      }
+
+      const sections = sectionIds
+        .map((id) => document.getElementById(id))
+        .filter((section): section is HTMLElement => Boolean(section));
+
+      if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
+        setActiveSection('about');
+        return;
+      }
+
+      const marker = Math.min(window.innerHeight * 0.32, 240);
+      const current = sections.find((section) => {
+        const bounds = section.getBoundingClientRect();
+        return bounds.top <= marker && bounds.bottom > marker;
+      });
+
+      if (current) {
+        setActiveSection(current.id);
+        return;
+      }
+
+      const nearest = sections
+        .filter((section) => {
+          const bounds = section.getBoundingClientRect();
+          return bounds.bottom > 72 && bounds.top < window.innerHeight;
+        })
+        .sort((first, second) => (
+          Math.abs(first.getBoundingClientRect().top - marker)
+          - Math.abs(second.getBoundingClientRect().top - marker)
+        ))[0];
+      setActiveSection(nearest?.id ?? '');
     };
     updateActiveSection();
     window.addEventListener('scroll', updateActiveSection, { passive: true });
