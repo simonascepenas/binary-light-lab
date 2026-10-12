@@ -4,7 +4,14 @@ function bitsFor(character: string) {
 
 export type ExportLayout = 'worksheet' | 'coded';
 
-function createCodedLatex(text: string) {
+function latexEscape(value: string) {
+  return value.replace(/[\\#$%&_{}~^]/g, (character) => ({
+    '\\': '\\textbackslash{}', '#': '\\#', '$': '\\$', '%': '\\%', '&': '\\&',
+    '_': '\\_', '{': '\\{', '}': '\\}', '~': '\\textasciitilde{}', '^': '\\textasciicircum{}',
+  })[character] ?? character);
+}
+
+function createCodedLatex(text: string, title: string) {
   const message = [...text].map((character) => {
     if (character === ' ') return '\\hspace{1.2em}\\allowbreak ';
     return `\\ByteInline{${bitsFor(character).join('}{')}}\\hspace{0.08em}\\allowbreak `;
@@ -14,6 +21,7 @@ function createCodedLatex(text: string) {
 \\usepackage[margin=1in]{geometry}
 \\usepackage{tikz}
 \\usepackage{xcolor}
+\\usepackage[utf8]{inputenc}
 \\usepackage[T1]{fontenc}
 \\usepackage{lmodern}
 \\setlength{\\parindent}{0pt}
@@ -35,10 +43,10 @@ function createCodedLatex(text: string) {
 \\newcommand{\\PlaceTinyBulb}[2]{\\begin{scope}[xshift=#1 cm,scale=0.045]\\ifnum#2=1\\BulbOn\\else\\BulbOff\\fi\\end{scope}}
 \\newcommand{\\ByteInline}[8]{\\begin{tikzpicture}[baseline=-0.35ex]\\PlaceTinyBulb{0}{#1}\\PlaceTinyBulb{0.12}{#2}\\PlaceTinyBulb{0.24}{#3}\\PlaceTinyBulb{0.36}{#4}\\PlaceTinyBulb{0.48}{#5}\\PlaceTinyBulb{0.60}{#6}\\PlaceTinyBulb{0.72}{#7}\\PlaceTinyBulb{0.84}{#8}\\end{tikzpicture}}
 \\begin{document}
-{\\Large\\textbf{Coded Binary Text}}\\hfill Dr. Simonas Cepenas
+\\textbf{${latexEscape(title)}}\\hfill Dr. Simonas Čepėnas
 
 \\medskip
-Yellow is ON (1); white is OFF (0). Each compact group of eight bulbs is one ASCII character.
+{\\tiny Yellow is ON (1); white is OFF (0). Each compact group of eight bulbs is one ASCII character.}
 
 \\bigskip
 \\raggedright
@@ -48,8 +56,8 @@ ${message}
 `;
 }
 
-export function createLatexWorksheet(text: string, layout: ExportLayout = 'worksheet') {
-  if (layout === 'coded') return createCodedLatex(text);
+export function createLatexWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Oscar Brown Jr., The Snake') {
+  if (layout === 'coded') return createCodedLatex(text, title.trim() || 'Coded Binary Text');
   const rows = [...text].map((character, index) => {
     const bits = bitsFor(character).join('}{');
     return `\\textbf{${index + 1}:} \\quad \\ByteRow{${bits}} & Binary: \\rule{0.62\\linewidth}{0.5pt}\\\\[-0.25em]\n& Decimal: \\rule{0.58\\linewidth}{0.5pt}\\\\[-0.25em]\n& ASCII character: \\rule{0.48\\linewidth}{0.5pt}\\\\[0.2em]`;
@@ -60,6 +68,7 @@ export function createLatexWorksheet(text: string, layout: ExportLayout = 'works
 \\usepackage{tikz}
 \\usepackage{xcolor}
 \\usepackage{longtable}
+\\usepackage[utf8]{inputenc}
 \\usepackage[T1]{fontenc}
 \\usepackage{lmodern}
 \\setlength{\\parindent}{0pt}
@@ -88,7 +97,7 @@ export function createLatexWorksheet(text: string, layout: ExportLayout = 'works
 \\newcommand{\\ByteRow}[8]{\\begin{tikzpicture}[baseline=-2pt]\\PlaceBulb{0}{#1}\\PlaceBulb{0.93}{#2}\\PlaceBulb{1.86}{#3}\\PlaceBulb{2.79}{#4}\\PlaceBulb{3.72}{#5}\\PlaceBulb{4.65}{#6}\\PlaceBulb{5.58}{#7}\\PlaceBulb{6.51}{#8}\\end{tikzpicture}}
 
 \\begin{document}
-{\\Large\\textbf{Binary Light Worksheet}}\\hfill Dr. Simonas Cepenas
+{\\Large\\textbf{Binary Light Worksheet}}\\hfill Dr. Simonas Čepėnas
 
 \\medskip
 Yellow is ON (1); white is OFF (0). Read each byte from MSB to LSB, convert it to decimal, then use ASCII to reveal the message.
@@ -171,7 +180,18 @@ function pageStream(characters: string[], pageIndex: number, pageCount: number) 
   return stream;
 }
 
-function codedPageStreams(text: string) {
+function pdfAuthorName(x: number, y: number, size = 9) {
+  let commands = pdfText('Dr. Simonas Cepenas', x, y, size);
+  const scale = size / 9;
+  const caronX = x + 55 * scale;
+  const accentY = y + 10 * scale;
+  const dotX = x + 70.5 * scale;
+  commands += `0 0 0 RG 0.7 w ${caronX - 2 * scale} ${accentY + 1.2 * scale} m ${caronX} ${accentY - 0.8 * scale} l ${caronX + 2 * scale} ${accentY + 1.2 * scale} l S\n`;
+  commands += `0 0 0 rg ${dotX - 0.75 * scale} ${accentY + 0.4 * scale} ${1.5 * scale} ${1.5 * scale} re f\n`;
+  return commands;
+}
+
+function codedPageStreams(text: string, title: string) {
   const streams: string[] = [];
   let stream = '';
   let x = 40;
@@ -180,8 +200,9 @@ function codedPageStreams(text: string) {
   const wordGap = 12;
   const lineHeight = 18;
   const startPage = () => {
-    stream = pdfText('CODED BINARY TEXT', 40, 805, 17, true);
-    stream += pdfText('Yellow = ON (1)   White = OFF (0)   Each group of eight bulbs is one ASCII character.', 40, 783, 9);
+    stream = pdfText(title.slice(0, 52), 40, 805, 12, true);
+    stream += pdfAuthorName(466, 805, 9);
+    stream += pdfText('Yellow is ON (1); white is OFF (0). Each compact group of eight bulbs is one ASCII character.', 40, 784, 7);
     x = 40; y = 750;
   };
   const finishPage = () => { streams.push(stream); startPage(); };
@@ -202,11 +223,11 @@ function codedPageStreams(text: string) {
   return streams;
 }
 
-export function createPdfWorksheet(text: string, layout: ExportLayout = 'worksheet') {
+export function createPdfWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Oscar Brown Jr., The Snake') {
   const characters = [...text];
   const worksheetPageCount = Math.ceil(characters.length / 9);
   const pageStreams = layout === 'coded'
-    ? codedPageStreams(text)
+    ? codedPageStreams(text, title.trim() || 'Coded Binary Text')
     : Array.from({ length: worksheetPageCount }, (_, index) => pageStream(characters.slice(index * 9, index * 9 + 9), index, worksheetPageCount));
   const objects: string[] = ['', '', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'];
   const pageReferences: number[] = [];

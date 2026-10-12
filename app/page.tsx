@@ -58,6 +58,7 @@ export default function Home() {
   const [bits, setBits] = useState([false, true, false, false, true, false, false, false]);
   const [converterText, setConverterText] = useState('HELLO.');
   const [exportLayout, setExportLayout] = useState<ExportLayout>('worksheet');
+  const [documentTitle, setDocumentTitle] = useState('Oscar Brown Jr., The Snake');
   const [displayName, setDisplayName] = useState('');
   const [classCode, setClassCode] = useState('');
   const [mode, setMode] = useState<TaskMode>('numbers');
@@ -86,8 +87,8 @@ export default function Home() {
   const exportText = cleanText(converterText);
 
   const exportName = exportLayout === 'worksheet' ? 'binary-light-worksheet' : 'binary-light-coded-text';
-  const downloadLatex = () => saveDownload(createLatexWorksheet(exportText, exportLayout), 'application/x-tex;charset=utf-8', `${exportName}.tex`);
-  const downloadPdf = () => saveDownload(createPdfWorksheet(exportText, exportLayout), 'application/pdf', `${exportName}.pdf`);
+  const downloadLatex = () => saveDownload(createLatexWorksheet(exportText, exportLayout, documentTitle), 'application/x-tex;charset=utf-8', `${exportName}.tex`);
+  const downloadPdf = () => saveDownload(createPdfWorksheet(exportText, exportLayout, documentTitle), 'application/pdf', `${exportName}.pdf`);
 
   const loadResults = async (filter = '') => {
     try { const response = await fetch(`/api/results${filter ? `?classCode=${encodeURIComponent(filter)}` : ''}`); const data = await response.json(); setLeaderboard(data.results ?? []); } catch { setLeaderboard([]); }
@@ -190,6 +191,7 @@ export default function Home() {
       <div className="section-heading"><div><span className="step-kicker">04 / CREATE</span><h2>Write your own message.</h2></div><p>Write as many sentences as you need. Each character is translated into its ASCII byte and shown as eight lamps.</p></div>
       <label className="converter-input"><span>YOUR TEXT</span><textarea value={converterText} onChange={(e) => setConverterText(e.target.value)} rows={4} placeholder="TYPE AS MANY SENTENCES AS YOU NEED." /><small>{converterText.length} characters</small></label>
       <div className="format-bar" role="group" aria-label="Message format"><span>FORMAT</span><button className={exportLayout === 'worksheet' ? 'selected' : ''} aria-pressed={exportLayout === 'worksheet'} onClick={() => setExportLayout('worksheet')}><strong>Task worksheet</strong><small>One byte per row + answer lines</small></button><button className={exportLayout === 'coded' ? 'selected' : ''} aria-pressed={exportLayout === 'coded'} onClick={() => setExportLayout('coded')}><strong>Coded text</strong><small>Small bytes that wrap like sentences</small></button></div>
+      {exportLayout === 'coded' && <label className="document-title"><span>DOCUMENT TITLE</span><input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} maxLength={80} placeholder="Oscar Brown Jr., The Snake" /></label>}
       {exportLayout === 'worksheet'
         ? <div className="converter-output" tabIndex={0} aria-label="Scrollable binary translation">{convertedBytes.length ? convertedBytes.map((byte, index) => <div className="converted-byte" key={`${byte.value}-${index}`}><span className="character-label">{byte.character === ' ' ? 'SPACE' : byte.character}</span><ByteDisplay value={byte.value} compact /><code>{byte.bits.join('')} · {byte.value}</code></div>) : <p>Start typing to light the lamps.</p>}</div>
         : <div className="converter-output coded-output" tabIndex={0} aria-label="Coded text preview">{codedWords.length ? <div className="coded-message">{codedWords.map((word, wordIndex) => <span className="coded-word" key={`${word}-${wordIndex}`}>{[...word].map((character, characterIndex) => <ByteDisplay key={`${character}-${characterIndex}`} value={character.charCodeAt(0)} micro />)}</span>)}</div> : <p>Start typing to light the lamps.</p>}</div>}
