@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, Fragment, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { createLatexWorksheet, createPdfWorksheet, saveDownload, type ExportLayout, type ExportRepresentation } from './export-utils';
 
 const weights = [128, 64, 32, 16, 8, 4, 2, 1];
@@ -51,7 +52,8 @@ function AsciiTable() {
     ...Array.from({ length: 10 }, (_, i) => [48 + i, String(i)] as [number, string]),
     ...Array.from({ length: 26 }, (_, i) => [65 + i, String.fromCharCode(65 + i)] as [number, string]),
   ];
-  return <div className="ascii-grid">{entries.map(([code, character]) => <div key={code}><small>{code}</small><strong className={character.length > 1 ? 'word-symbol' : ''}>{character}</strong><code>{toBits(code).join('')}</code></div>)}</div>;
+  const columns = Array.from({ length: 4 }, (_, column) => entries.slice(column * 10, column * 10 + 10));
+  return <div className="ascii-table-wrap"><table className="ascii-table"><caption>ASCII character, decimal value, and 8-bit binary code</caption><thead><tr>{columns.map((_, column) => <Fragment key={column}><th scope="col">CHAR</th><th scope="col">DEC</th><th scope="col">BINARY</th></Fragment>)}</tr></thead><tbody>{Array.from({ length: 10 }, (_, row) => <tr key={row}>{columns.map((column, columnIndex) => { const entry = column[row]; return entry ? <Fragment key={`${columnIndex}-${entry[0]}`}><th scope="row" className={entry[1].length > 1 ? 'word-symbol' : ''}>{entry[1]}</th><td>{entry[0]}</td><td><code>{toBits(entry[0]).join('')}</code></td></Fragment> : <Fragment key={`${columnIndex}-empty`}><td /><td /><td /></Fragment>; })}</tr>)}</tbody></table></div>;
 }
 
 export default function Home() {
@@ -147,7 +149,7 @@ export default function Home() {
   return <main>
     <header className="topbar">
       <a className="brand" href="#top" aria-label="Binary Light Lab home"><span className="brand-mark">01</span><span><b>Binary Light Lab</b><small>AI Principles &amp; Applications</small></span></a>
-      <nav aria-label="Primary navigation"><a href="#learn">Learn</a><a href="#ascii">ASCII</a><a className="active" href="#tests">Tests</a><a href="#converter">Converter</a><a href="#results">Results</a></nav>
+      <nav aria-label="Primary navigation"><a href="#learn">Learn</a><a href="#ascii">ASCII</a><a className="active" href="#tests">Tests</a><a href="#converter">Converter</a><a href="#results">Results</a><a href="#about">About</a></nav>
       <div className="course-chip">Dr. Simonas Čepėnas</div>
     </header>
 
@@ -205,6 +207,11 @@ export default function Home() {
     <section className="results-section" id="results">
       <div className="section-heading"><div><span className="step-kicker">05 / RESULTS</span><h2>Class performance.</h2></div><p>Every completed test records task, level, score, accuracy, and time.</p></div>
       <div className="results-card" tabIndex={0} aria-label="Scrollable class results"><div className="results-head"><span>RANK</span><span>STUDENT</span><span>TEST</span><span>LEVEL</span><span>SCORE</span><span>ACCURACY</span><span>TIME</span></div>{leaderboard.length ? leaderboard.map((result, index) => <div className="result-row" key={result.id}><span className={`rank rank-${index + 1}`}>{index + 1}</span><strong>{result.displayName}</strong><span>{result.taskType || 'mixed'}</span><span>{result.level || '—'}</span><b>{result.score}</b><span>{result.accuracy}%</span><span>{formatTime(result.durationSeconds)}</span></div>) : <p className="empty-results">No completed tests yet.</p>}</div>
+    </section>
+
+    <section className="author-section" id="about">
+      <div className="author-photo"><Image src="/author-simonas-cepenas.webp" alt="Dr. Simonas Čepėnas" width={1500} height={1000} /><span>ABOUT THE AUTHOR</span></div>
+      <div className="author-copy"><span className="step-kicker">06 / AUTHOR</span><h2>Dr. Simonas Čepėnas</h2><p>Dr. Simonas Čepėnas earned his PhD in Foreign Affairs and Methods from the University of Virginia. He teaches subjects spanning mathematics, statistics, data science, artificial intelligence, economics, and politics.</p><p>Outside the classroom, he is a husband and the father of two wonderful children.</p><div className="author-fields">MATHEMATICS · STATISTICS · DATA SCIENCE · AI · ECONOMICS · POLITICS</div></div>
     </section>
 
     <footer><div className="brand"><span className="brand-mark">01</span><span><b>Binary Light Lab</b><small>AI Principles &amp; Applications</small></span></div><p>Dr. Simonas Čepėnas · ISM University of Management and Economics</p><a href="#top">Top ↑</a></footer>

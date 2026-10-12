@@ -22,7 +22,7 @@ function latexAsciiReference() {
   const columns = Array.from({ length: 4 }, (_, column) => asciiEntries.slice(column * 10, column * 10 + 10));
   const rows = Array.from({ length: 10 }, (_, row) => columns.map((column) => {
     const entry = column[row];
-    return entry ? `${entry[0]} & \\textbf{${entry[1]}} & \\texttt{${entry[0].toString(2).padStart(8, '0')}}` : ' & & ';
+    return entry ? `\\textbf{${entry[1]}} & ${entry[0]} & \\texttt{${entry[0].toString(2).padStart(8, '0')}}` : ' & & ';
   }).join(' & ')).join(' \\\\\n');
   return `
 \\newpage
@@ -31,12 +31,11 @@ function latexAsciiReference() {
 \\medskip
 {\\tiny The characters used in this activity, with decimal values and 8-bit binary codes.}
 
-\\bigskip
+\\medskip
 \\begin{center}
-\\renewcommand{\\arraystretch}{1.55}
+\\renewcommand{\\arraystretch}{1.42}
 {\\scriptsize\\begin{tabular}{@{}rcl@{\\hspace{1.5em}}rcl@{\\hspace{1.5em}}rcl@{\\hspace{1.5em}}rcl@{}}
-\\textbf{DEC} & \\textbf{CHAR} & \\textbf{BINARY} & \\textbf{DEC} & \\textbf{CHAR} & \\textbf{BINARY} & \\textbf{DEC} & \\textbf{CHAR} & \\textbf{BINARY} & \\textbf{DEC} & \\textbf{CHAR} & \\textbf{BINARY} \\\\[-0.2em]
-\\hline
+{\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} & {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} & {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} & {\\color{gray!70}\\textbf{CHAR}} & {\\color{gray!70}\\textbf{DEC}} & {\\color{gray!70}\\textbf{BINARY}} \\\\[0.15em]
 ${rows}
 \\end{tabular}}
 \\end{center}
@@ -277,15 +276,14 @@ function asciiReferencePageStream() {
   const columns = Array.from({ length: 4 }, (_, column) => asciiEntries.slice(column * 10, column * 10 + 10));
   columns.forEach((column, columnIndex) => {
     const x = 40 + columnIndex * 135;
-    stream += `0.9 0.9 0.9 rg ${x} 742 118 22 re f\n`;
-    stream += pdfText('DEC', x + 5, 750, 7, true);
-    stream += pdfText('CHAR', x + 32, 750, 7, true);
-    stream += pdfText('BINARY', x + 68, 750, 7, true);
+    stream += pdfText('CHAR', x + 5, 750, 7, true, false, 0.48);
+    stream += pdfText('DEC', x + 39, 750, 7, true, false, 0.48);
+    stream += pdfText('BINARY', x + 68, 750, 7, true, false, 0.48);
+    stream += `0.72 0.74 0.78 RG 0.45 w ${x} 742 m ${x + 118} 742 l S\n`;
     column.forEach(([decimal, character], rowIndex) => {
       const y = 721 - rowIndex * 29;
-      if (rowIndex % 2 === 1) stream += `0.97 0.97 0.97 rg ${x} ${y - 7} 118 22 re f\n`;
-      stream += pdfText(String(decimal), x + 5, y, 8);
-      stream += pdfText(character, x + 32, y, 8, true);
+      stream += pdfText(character, x + 5, y, 8, true);
+      stream += pdfText(String(decimal), x + 39, y, 8, false, true, 0.35);
       stream += pdfText(decimal.toString(2).padStart(8, '0'), x + 68, y, 7);
     });
   });
