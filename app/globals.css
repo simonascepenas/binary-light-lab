@@ -90,3 +90,16 @@ body { background-color:#fff; background-image:linear-gradient(var(--grid) 1px,t
 .converter-input textarea { min-height:112px; padding:17px 14px; border:0; border-left:2px solid var(--ink); border-radius:0; outline:none; resize:vertical; background:var(--paper); font:800 17px/1.5 monospace; text-transform:uppercase; }
 .converter-input textarea:focus { outline:3px solid var(--blue); outline-offset:-3px; }
 @media(max-width:760px){.converter-input textarea{grid-column:1/-1;border-left:0}.converter-input small{padding:10px 14px}}
+.format-bar { display:flex; align-items:stretch; border:2px solid var(--ink); border-top:0; background:#fff; color:var(--ink); }.format-bar>span { display:grid; place-items:center; padding:0 18px; background:var(--ink); color:#aaa; font:900 9px monospace; letter-spacing:.12em; }.format-bar button { min-width:220px; display:grid; gap:3px; padding:12px 16px; text-align:left; border:0; border-right:1px solid var(--ink); background:#fff; cursor:pointer; }.format-bar button.selected { background:var(--yellow); }.format-bar strong { font-size:11px; }.format-bar small { color:#666; font-size:9px; }
+.converter-output.coded-output { display:block; min-height:190px; overflow-x:visible; }
+.coded-message { display:flex; flex-wrap:wrap; align-items:flex-start; gap:15px 12px; }
+.coded-word { display:inline-flex; flex-wrap:nowrap; align-items:flex-start; gap:2px; }
+.bulb-row.micro-row { display:inline-flex; grid-template-columns:none; gap:0; width:auto; padding:4px 1px 5px; overflow:visible; border:0; background:none; background-image:none; }
+.bulb-button.micro { min-width:5px; width:5px; padding-top:3px; }
+.bulb-button.micro .bulb-glass { width:5px; height:5px; border-width:1px; }
+.bulb-button.micro .highlight,.bulb-button.micro .filament { display:none; }
+.bulb-button.micro .ray { display:block; width:1px; height:2px; left:calc(50% - .5px); top:0; transform-origin:.5px 5.5px; }
+.bulb-button.micro .bulb-neck { width:2px; height:1px; border-width:1px; }
+.bulb-button.micro .bulb-base { width:4px; height:3px; padding:0; border-width:1px; }
+.bulb-button.micro .bulb-base i,.bulb-button.micro .bulb-base:after { display:none; }
+@media(max-width:760px){.format-bar{flex-wrap:wrap}.format-bar>span{width:100%;padding:8px}.format-bar button{flex:1;min-width:150px}.converter-output.coded-output{padding:18px 12px}.coded-message{gap:13px 9px}}

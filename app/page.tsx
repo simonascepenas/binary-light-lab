@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { createLatexWorksheet, createPdfWorksheet, saveDownload } from './export-utils';
+import { createLatexWorksheet, createPdfWorksheet, saveDownload, type ExportLayout } from './export-utils';
 
 const weights = [128, 64, 32, 16, 8, 4, 2, 1];
 const taskBank = {
@@ -30,19 +30,19 @@ function cleanText(value: string) { return [...value.toUpperCase()].map((charact
 function toBytes(text: string) { return [...text].map((character) => ({ character, value: character.charCodeAt(0), bits: toBits(character.charCodeAt(0)) })); }
 function formatTime(seconds: number) { return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`; }
 
-function Bulb({ on, index, onToggle, compact = false }: { on: boolean; index: number; onToggle?: () => void; compact?: boolean }) {
+function Bulb({ on, index, onToggle, compact = false, micro = false }: { on: boolean; index: number; onToggle?: () => void; compact?: boolean; micro?: boolean }) {
   const contents = <>
     {Array.from({ length: 12 }, (_, ray) => <span className={`ray ray-${ray + 1}`} key={ray} />)}
     <span className="bulb-glass"><span className="highlight" /><span className="filament"><i /><i /><i /></span></span>
     <span className="bulb-neck" /><span className="bulb-base"><i /><i /><i /></span>
-    {!compact && <><strong>{on ? '1' : '0'}</strong><small>{weights[index]}</small></>}
+    {!compact && !micro && <><strong>{on ? '1' : '0'}</strong><small>{weights[index]}</small></>}
   </>;
-  if (!onToggle) return <span className={`bulb-button static ${on ? 'is-on' : ''} ${compact ? 'compact' : ''}`} aria-label={`${weights[index]} bit, ${on ? 'on' : 'off'}`}>{contents}</span>;
+  if (!onToggle) return <span className={`bulb-button static ${on ? 'is-on' : ''} ${compact ? 'compact' : ''} ${micro ? 'micro' : ''}`} aria-label={`${weights[index]} bit, ${on ? 'on' : 'off'}`}>{contents}</span>;
   return <button className={`bulb-button ${on ? 'is-on' : ''}`} onClick={onToggle} aria-label={`${weights[index]} bit, ${on ? 'on' : 'off'}`} aria-pressed={on}>{contents}</button>;
 }
 
-function ByteDisplay({ value, compact = false }: { value: number; compact?: boolean }) {
-  return <div className={`bulb-row ${compact ? 'compact-row' : ''}`}>{toBits(value).map((bit, index) => <Bulb key={`${value}-${index}`} on={Boolean(bit)} index={index} compact={compact} />)}</div>;
+function ByteDisplay({ value, compact = false, micro = false }: { value: number; compact?: boolean; micro?: boolean }) {
+  return <span className={`bulb-row ${compact ? 'compact-row' : ''} ${micro ? 'micro-row' : ''}`}>{toBits(value).map((bit, index) => <Bulb key={`${value}-${index}`} on={Boolean(bit)} index={index} compact={compact} micro={micro} />)}</span>;
 }
 
 function AsciiTable() {
@@ -57,6 +57,7 @@ function AsciiTable() {
 export default function Home() {
   const [bits, setBits] = useState([false, true, false, false, true, false, false, false]);
   const [converterText, setConverterText] = useState('HELLO.');
+  const [exportLayout, setExportLayout] = useState<ExportLayout>('worksheet');
   const [displayName, setDisplayName] = useState('');
   const [classCode, setClassCode] = useState('');
   const [mode, setMode] = useState<TaskMode>('numbers');
@@ -80,11 +81,13 @@ export default function Home() {
   const current = tasks[question];
   const currentBytes = typeof current === 'number' ? [current] : toBytes(current).map((byte) => byte.value);
   const convertedBytes = toBytes(cleanText(deferredConverterText));
+  const codedWords = cleanText(deferredConverterText).trim().split(/ +/).filter(Boolean);
   const accuracy = Math.round((tasks.length / (tasks.length + mistakes)) * 100);
   const exportText = cleanText(converterText);
 
-  const downloadLatex = () => saveDownload(createLatexWorksheet(exportText), 'application/x-tex;charset=utf-8', 'binary-light-worksheet.tex');
-  const downloadPdf = () => saveDownload(createPdfWorksheet(exportText), 'application/pdf', 'binary-light-worksheet.pdf');
+  const exportName = exportLayout === 'worksheet' ? 'binary-light-worksheet' : 'binary-light-coded-text';
+  const downloadLatex = () => saveDownload(createLatexWorksheet(exportText, exportLayout), 'application/x-tex;charset=utf-8', `${exportName}.tex`);
+  const downloadPdf = () => saveDownload(createPdfWorksheet(exportText, exportLayout), 'application/pdf', `${exportName}.pdf`);
 
   const loadResults = async (filter = '') => {
     try { const response = await fetch(`/api/results${filter ? `?classCode=${encodeURIComponent(filter)}` : ''}`); const data = await response.json(); setLeaderboard(data.results ?? []); } catch { setLeaderboard([]); }
@@ -186,8 +189,11 @@ export default function Home() {
     <section className="converter-section" id="converter">
       <div className="section-heading"><div><span className="step-kicker">04 / CREATE</span><h2>Write your own message.</h2></div><p>Write as many sentences as you need. Each character is translated into its ASCII byte and shown as eight lamps.</p></div>
       <label className="converter-input"><span>YOUR TEXT</span><textarea value={converterText} onChange={(e) => setConverterText(e.target.value)} rows={4} placeholder="TYPE AS MANY SENTENCES AS YOU NEED." /><small>{converterText.length} characters</small></label>
-      <div className="converter-output" tabIndex={0} aria-label="Scrollable binary translation">{convertedBytes.length ? convertedBytes.map((byte, index) => <div className="converted-byte" key={`${byte.value}-${index}`}><span className="character-label">{byte.character === ' ' ? 'SPACE' : byte.character}</span><ByteDisplay value={byte.value} compact /><code>{byte.bits.join('')} · {byte.value}</code></div>) : <p>Start typing to light the lamps.</p>}</div>
-      <div className="export-bar"><div><strong>PRINTABLE WORKSHEET</strong><span>The downloads show only the lamps and blank answer lines.</span></div><button disabled={!exportText} onClick={downloadLatex}>Download LaTeX</button><button disabled={!exportText} className="export-primary" onClick={downloadPdf}>Download PDF</button></div>
+      <div className="format-bar" role="group" aria-label="Message format"><span>FORMAT</span><button className={exportLayout === 'worksheet' ? 'selected' : ''} aria-pressed={exportLayout === 'worksheet'} onClick={() => setExportLayout('worksheet')}><strong>Task worksheet</strong><small>One byte per row + answer lines</small></button><button className={exportLayout === 'coded' ? 'selected' : ''} aria-pressed={exportLayout === 'coded'} onClick={() => setExportLayout('coded')}><strong>Coded text</strong><small>Small bytes that wrap like sentences</small></button></div>
+      {exportLayout === 'worksheet'
+        ? <div className="converter-output" tabIndex={0} aria-label="Scrollable binary translation">{convertedBytes.length ? convertedBytes.map((byte, index) => <div className="converted-byte" key={`${byte.value}-${index}`}><span className="character-label">{byte.character === ' ' ? 'SPACE' : byte.character}</span><ByteDisplay value={byte.value} compact /><code>{byte.bits.join('')} · {byte.value}</code></div>) : <p>Start typing to light the lamps.</p>}</div>
+        : <div className="converter-output coded-output" tabIndex={0} aria-label="Coded text preview">{codedWords.length ? <div className="coded-message">{codedWords.map((word, wordIndex) => <span className="coded-word" key={`${word}-${wordIndex}`}>{[...word].map((character, characterIndex) => <ByteDisplay key={`${character}-${characterIndex}`} value={character.charCodeAt(0)} micro />)}</span>)}</div> : <p>Start typing to light the lamps.</p>}</div>}
+      <div className="export-bar"><div><strong>{exportLayout === 'worksheet' ? 'TASK WORKSHEET' : 'CODED TEXT'}</strong><span>{exportLayout === 'worksheet' ? 'One byte per row with blank answer lines.' : 'Small bulb-bytes flow and wrap like regular text.'}</span></div><button disabled={!exportText} onClick={downloadLatex}>Download LaTeX</button><button disabled={!exportText} className="export-primary" onClick={downloadPdf}>Download PDF</button></div>
     </section>
 
     <section className="results-section" id="results">
