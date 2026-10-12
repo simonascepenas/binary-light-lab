@@ -4,6 +4,12 @@ function bitsFor(character: string) {
 
 export type ExportLayout = 'worksheet' | 'coded';
 
+const asciiEntries: Array<[number, string]> = [
+  [32, 'SPACE'], [46, '.'],
+  ...Array.from({ length: 10 }, (_, index) => [48 + index, String(index)] as [number, string]),
+  ...Array.from({ length: 26 }, (_, index) => [65 + index, String.fromCharCode(65 + index)] as [number, string]),
+];
+
 function latexEscape(value: string) {
   return value.replace(/[\\#$%&_{}~^]/g, (character) => ({
     '\\': '\\textbackslash{}', '#': '\\#', '$': '\\$', '%': '\\%', '&': '\\&',
@@ -11,7 +17,32 @@ function latexEscape(value: string) {
   })[character] ?? character);
 }
 
-function createCodedLatex(text: string, title: string) {
+function latexAsciiReference() {
+  const columns = Array.from({ length: 4 }, (_, column) => asciiEntries.slice(column * 10, column * 10 + 10));
+  const rows = Array.from({ length: 10 }, (_, row) => columns.map((column) => {
+    const entry = column[row];
+    return entry ? `${entry[0]} & \\textbf{${entry[1]}} & \\texttt{${entry[0].toString(2).padStart(8, '0')}}` : ' & & ';
+  }).join(' & ')).join(' \\\\\n');
+  return `
+\\newpage
+\\textbf{ASCII Reference}\\hfill Dr. Simonas Čepėnas
+
+\\medskip
+{\\tiny The characters used in this activity, with decimal values and 8-bit binary codes.}
+
+\\bigskip
+\\begin{center}
+\\renewcommand{\\arraystretch}{1.55}
+{\\scriptsize\\begin{tabular}{@{}rcl@{\\hspace{1.5em}}rcl@{\\hspace{1.5em}}rcl@{\\hspace{1.5em}}rcl@{}}
+\\textbf{DEC} & \\textbf{CHAR} & \\textbf{BINARY} & \\textbf{DEC} & \\textbf{CHAR} & \\textbf{BINARY} & \\textbf{DEC} & \\textbf{CHAR} & \\textbf{BINARY} & \\textbf{DEC} & \\textbf{CHAR} & \\textbf{BINARY} \\\\[-0.2em]
+\\hline
+${rows}
+\\end{tabular}}
+\\end{center}
+`;
+}
+
+function createCodedLatex(text: string, title: string, includeAsciiTable: boolean) {
   const message = [...text].map((character) => {
     if (character === ' ') return '\\hspace{1.2em}\\allowbreak ';
     return `\\ByteInline{${bitsFor(character).join('}{')}}\\hspace{0.08em}\\allowbreak `;
@@ -52,12 +83,13 @@ function createCodedLatex(text: string, title: string) {
 \\raggedright
 \\setlength{\\lineskip}{4pt}
 ${message}
+${includeAsciiTable ? latexAsciiReference() : ''}
 \\end{document}
 `;
 }
 
-export function createLatexWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Oscar Brown Jr., The Snake') {
-  if (layout === 'coded') return createCodedLatex(text, title.trim() || 'Coded Binary Text');
+export function createLatexWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Oscar Brown Jr., The Snake', includeAsciiTable = false) {
+  if (layout === 'coded') return createCodedLatex(text, title.trim() || 'Coded Binary Text', includeAsciiTable);
   const rows = [...text].map((character, index) => {
     const bits = bitsFor(character).join('}{');
     return `\\textbf{${index + 1}:} \\quad \\ByteRow{${bits}} & Binary: \\rule{0.62\\linewidth}{0.5pt}\\\\[-0.25em]\n& Decimal: \\rule{0.58\\linewidth}{0.5pt}\\\\[-0.25em]\n& ASCII character: \\rule{0.48\\linewidth}{0.5pt}\\\\[0.2em]`;
@@ -113,6 +145,7 @@ ${rows}
 
 \\vfill
 \\textbf{Hidden message:} \\rule{0.72\\linewidth}{0.8pt}
+${includeAsciiTable ? latexAsciiReference() : ''}
 \\end{document}
 `;
 }
@@ -122,7 +155,7 @@ function pdfEscape(value: string) {
 }
 
 function pdfText(value: string, x: number, y: number, size = 10, bold = false) {
-  return `BT /${bold ? 'F2' : 'F1'} ${size} Tf ${x} ${y} Td (${pdfEscape(value)}) Tj ET\n`;
+  return `0 0 0 rg BT /${bold ? 'F2' : 'F1'} ${size} Tf ${x} ${y} Td (${pdfEscape(value)}) Tj ET\n`;
 }
 
 function circlePath(x: number, y: number, radius: number) {
@@ -163,7 +196,7 @@ function pdfMicroBulb(x: number, y: number, on: boolean) {
   return commands;
 }
 
-function pageStream(characters: string[], pageIndex: number, pageCount: number) {
+function pageStream(characters: string[], pageIndex: number) {
   let stream = pdfText('BINARY LIGHT WORKSHEET', 40, 805, 17, true);
   stream += pdfText('Yellow = ON (1)   White = OFF (0)   Read each byte from MSB to LSB.', 40, 783, 9);
   stream += pdfText('Place values: 128   64   32   16   8   4   2   1', 40, 766, 9, true);
@@ -176,7 +209,6 @@ function pageStream(characters: string[], pageIndex: number, pageCount: number) 
     stream += pdfText('ASCII: ___________________', 335, y - 15, 8);
   });
   stream += pdfText('Hidden message: _______________________________________________', 40, 44, 10, true);
-  stream += pdfText(`Page ${pageIndex + 1} of ${pageCount}`, 500, 22, 8);
   return stream;
 }
 
@@ -223,16 +255,39 @@ function codedPageStreams(text: string, title: string) {
   return streams;
 }
 
-export function createPdfWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Oscar Brown Jr., The Snake') {
+function asciiReferencePageStream() {
+  let stream = pdfText('ASCII REFERENCE', 40, 805, 15, true);
+  stream += pdfAuthorName(466, 805, 9);
+  stream += pdfText('Characters used in this activity, with decimal values and 8-bit binary codes.', 40, 784, 7);
+  const columns = Array.from({ length: 4 }, (_, column) => asciiEntries.slice(column * 10, column * 10 + 10));
+  columns.forEach((column, columnIndex) => {
+    const x = 40 + columnIndex * 135;
+    stream += `0.9 0.9 0.9 rg ${x} 742 118 22 re f\n`;
+    stream += pdfText('DEC', x + 5, 750, 7, true);
+    stream += pdfText('CHAR', x + 32, 750, 7, true);
+    stream += pdfText('BINARY', x + 68, 750, 7, true);
+    column.forEach(([decimal, character], rowIndex) => {
+      const y = 721 - rowIndex * 29;
+      if (rowIndex % 2 === 1) stream += `0.97 0.97 0.97 rg ${x} ${y - 7} 118 22 re f\n`;
+      stream += pdfText(String(decimal), x + 5, y, 8);
+      stream += pdfText(character, x + 32, y, 8, true);
+      stream += pdfText(decimal.toString(2).padStart(8, '0'), x + 68, y, 7);
+    });
+  });
+  return stream;
+}
+
+export function createPdfWorksheet(text: string, layout: ExportLayout = 'worksheet', title = 'Oscar Brown Jr., The Snake', includeAsciiTable = false) {
   const characters = [...text];
   const worksheetPageCount = Math.ceil(characters.length / 9);
   const pageStreams = layout === 'coded'
     ? codedPageStreams(text, title.trim() || 'Coded Binary Text')
-    : Array.from({ length: worksheetPageCount }, (_, index) => pageStream(characters.slice(index * 9, index * 9 + 9), index, worksheetPageCount));
+    : Array.from({ length: worksheetPageCount }, (_, index) => pageStream(characters.slice(index * 9, index * 9 + 9), index));
+  if (includeAsciiTable) pageStreams.push(asciiReferencePageStream());
   const objects: string[] = ['', '', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'];
   const pageReferences: number[] = [];
   pageStreams.forEach((pageStreamContent, pageIndex) => {
-    const stream = layout === 'coded' ? pageStreamContent + pdfText(`Page ${pageIndex + 1} of ${pageStreams.length}`, 500, 22, 8) : pageStreamContent;
+    const stream = pageStreamContent + pdfText(`Page ${pageIndex + 1} of ${pageStreams.length}`, 500, 22, 8);
     const contentReference = objects.length;
     objects.push(`<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}endstream`);
     const pageReference = objects.length;
