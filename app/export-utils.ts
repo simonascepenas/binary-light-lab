@@ -5,7 +5,7 @@ function bitsFor(character: string) {
 export function createLatexWorksheet(text: string) {
   const rows = [...text].map((character, index) => {
     const bits = bitsFor(character).join('}{');
-    return `\\textbf{${index + 1}:} \\quad \\ByteRow{${bits}} & Binary: \\rule{0.62\\linewidth}{0.5pt}\\\\[-0.25em]\n& Decimal: \\rule{0.58\\linewidth}{0.5pt}\\\\[-0.25em]\n& ASCII character: \\rule{0.48\\linewidth}{0.5pt}\\\\[0.8em]`;
+    return `\\textbf{${index + 1}:} \\quad \\ByteRow{${bits}} & Binary: \\rule{0.62\\linewidth}{0.5pt}\\\\[-0.25em]\n& Decimal: \\rule{0.58\\linewidth}{0.5pt}\\\\[-0.25em]\n& ASCII character: \\rule{0.48\\linewidth}{0.5pt}\\\\[0.2em]`;
   }).join('\n');
 
   return `\\documentclass[11pt,a4paper]{article}
@@ -37,8 +37,8 @@ export function createLatexWorksheet(text: string) {
   \\draw[orange!90!black] (0.45,0.10)..controls(0.60,-0.10)and(0.60,-0.70)..(0.28,-1.00);
   \\draw[white,line width=2pt] (-0.45,0.55) arc (140:40:0.40);
 }
-\\newcommand{\\PlaceBulb}[2]{\\begin{scope}[xshift=#1 cm,scale=0.38]\\ifnum#2=1\\BulbOn\\else\\BulbOff\\fi\\end{scope}}
-\\newcommand{\\ByteRow}[8]{\\begin{tikzpicture}[baseline=-2pt]\\PlaceBulb{0}{#1}\\PlaceBulb{1.45}{#2}\\PlaceBulb{2.9}{#3}\\PlaceBulb{4.35}{#4}\\PlaceBulb{5.8}{#5}\\PlaceBulb{7.25}{#6}\\PlaceBulb{8.7}{#7}\\PlaceBulb{10.15}{#8}\\end{tikzpicture}}
+\\newcommand{\\PlaceBulb}[2]{\\begin{scope}[xshift=#1 cm,scale=0.30]\\ifnum#2=1\\BulbOn\\else\\BulbOff\\fi\\end{scope}}
+\\newcommand{\\ByteRow}[8]{\\begin{tikzpicture}[baseline=-2pt]\\PlaceBulb{0}{#1}\\PlaceBulb{0.93}{#2}\\PlaceBulb{1.86}{#3}\\PlaceBulb{2.79}{#4}\\PlaceBulb{3.72}{#5}\\PlaceBulb{4.65}{#6}\\PlaceBulb{5.58}{#7}\\PlaceBulb{6.51}{#8}\\end{tikzpicture}}
 
 \\begin{document}
 {\\Large\\textbf{Binary Light Worksheet}}\\hfill Dr. Simonas Cepenas
@@ -49,8 +49,9 @@ Yellow is ON (1); white is OFF (0). Read each byte from MSB to LSB, convert it t
 \\medskip
 \\textbf{MSB $\\rightarrow$ LSB:} 128, 64, 32, 16, 8, 4, 2, 1
 
+\\small
 \\renewcommand{\\arraystretch}{1.35}
-\\begin{longtable}{@{}p{0.70\\linewidth}p{0.28\\linewidth}@{}}
+\\begin{longtable}{@{}p{0.58\\linewidth}p{0.40\\linewidth}@{}}
 ${rows}
 \\end{longtable}
 
@@ -99,10 +100,10 @@ function pageStream(characters: string[], pageIndex: number, pageCount: number) 
   characters.forEach((character, row) => {
     const y = 718 - row * 72;
     stream += pdfText(String(pageIndex * 9 + row + 1) + '.', 42, y - 2, 10, true);
-    bitsFor(character).forEach((bit, index) => { stream += pdfBulb(82 + index * 38, y, Boolean(bit)); });
-    stream += pdfText('Binary: __________________', 402, y + 13, 8);
-    stream += pdfText('Decimal: ________________', 402, y - 1, 8);
-    stream += pdfText('ASCII: ___________________', 402, y - 15, 8);
+    bitsFor(character).forEach((bit, index) => { stream += pdfBulb(70 + index * 31, y, Boolean(bit)); });
+    stream += pdfText('Binary: __________________', 335, y + 13, 8);
+    stream += pdfText('Decimal: ________________', 335, y - 1, 8);
+    stream += pdfText('ASCII: ___________________', 335, y - 15, 8);
   });
   stream += pdfText('Hidden message: _______________________________________________', 40, 44, 10, true);
   stream += pdfText(`Page ${pageIndex + 1} of ${pageCount}`, 500, 22, 8);
