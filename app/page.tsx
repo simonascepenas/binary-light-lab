@@ -94,6 +94,7 @@ export default function Home() {
   const [joinName, setJoinName] = useState('');
   const [joinStatus, setJoinStatus] = useState('');
   const [activeSession, setActiveSession] = useState<ClassroomSession | null>(null);
+  const [activeSection, setActiveSection] = useState('');
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deferredConverterText = useDeferredValue(converterText);
   const value = useMemo(() => bits.reduce((sum, bit, i) => sum + (bit ? weights[i] : 0), 0), [bits]);
@@ -116,6 +117,19 @@ export default function Home() {
     let cancelled = false;
     fetch('/api/results').then((response) => response.json()).then((data) => { if (!cancelled) setLeaderboard(data.results ?? []); }).catch(() => { if (!cancelled) setLeaderboard([]); });
     return () => { cancelled = true; if (advanceTimer.current) clearTimeout(advanceTimer.current); };
+  }, []);
+
+  useEffect(() => {
+    const sectionIds = ['learn', 'ascii', 'tests', 'converter', 'results', 'classroom', 'about'];
+    const updateActiveSection = () => {
+      const marker = window.scrollY + 120;
+      const current = sectionIds.filter((id) => { const section = document.getElementById(id); return section && section.offsetTop <= marker; }).at(-1) ?? '';
+      setActiveSection(current);
+    };
+    updateActiveSection();
+    window.addEventListener('scroll', updateActiveSection, { passive: true });
+    window.addEventListener('resize', updateActiveSection);
+    return () => { window.removeEventListener('scroll', updateActiveSection); window.removeEventListener('resize', updateActiveSection); };
   }, []);
 
   useEffect(() => {
@@ -234,7 +248,7 @@ export default function Home() {
   return <main>
     <header className="topbar">
       <a className="brand" href="#top" aria-label="Binary Light Lab home"><span className="brand-mark">01</span><span><b>Binary Light Lab</b><small>AI Principles &amp; Applications</small></span></a>
-      <nav aria-label="Primary navigation"><a href="#learn">Learn</a><a href="#ascii">ASCII</a><a href="#classroom">Classroom</a><a className="active" href="#tests">Tests</a><a href="#converter">Converter</a><a href="#about">About</a></nav>
+      <nav aria-label="Primary navigation">{[['learn','Learn'],['ascii','ASCII'],['tests','Tests'],['converter','Converter'],['results','Results'],['classroom','Classroom'],['about','About']].map(([id, label]) => <a key={id} className={activeSection === id ? 'active' : ''} aria-current={activeSection === id ? 'location' : undefined} href={`#${id}`}>{label}</a>)}</nav>
       <div className="course-chip">Dr. Simonas Čepėnas</div>
     </header>
 
@@ -261,7 +275,7 @@ export default function Home() {
     </section>
 
     <section className="classroom-section" id="classroom">
-      <div className="section-heading"><div><span className="step-kicker">03 / CLASSROOM</span><h2>Run a class session.</h2></div><p>Create one assignment, share its short code, and watch students register and complete it. The report updates automatically.</p></div>
+      <div className="section-heading"><div><span className="step-kicker">06 / CLASSROOM</span><h2>Run a class session.</h2></div><p>Create one assignment, share its short code, and watch students register and complete it. The report updates automatically.</p></div>
       <div className="classroom-grid">
         <article className="classroom-card teacher-card"><div className="classroom-card-head"><span>FOR TEACHERS</span><b>01</b></div>{teacherSession ? <div className="teacher-dashboard"><div className="session-identity"><div><small>STUDENT CODE</small><strong>{teacherSession.code}</strong></div><div><small>ASSIGNMENT</small><b>{teacherSession.title}</b><span>{teacherSession.taskType} · level {teacherSession.level}</span></div></div><div className="session-summary"><div><strong>{sessionStudents.length}</strong><span>registered</span></div><div><strong>{sessionStudents.filter((student) => student.completed).length}</strong><span>completed</span></div><div><strong>{sessionStudents.length ? Math.round(sessionStudents.filter((student) => student.accuracy !== null).reduce((sum, student) => sum + (student.accuracy ?? 0), 0) / Math.max(1, sessionStudents.filter((student) => student.accuracy !== null).length)) : 0}%</strong><span>avg. accuracy</span></div></div><div className="teacher-actions"><button type="button" onClick={() => navigator.clipboard?.writeText(teacherSession.code)}>Copy student code</button><button type="button" onClick={downloadSessionReport} disabled={!sessionStudents.length}>Download CSV report</button><button type="button" className="quiet-button" onClick={() => { setTeacherSession(null); setSessionStudents([]); setTeacherStatus(''); window.localStorage.removeItem('binary-light-teacher-session'); }}>Close dashboard</button></div><div className="session-report" tabIndex={0}><div className="session-report-head"><span>STUDENT</span><span>STATUS</span><span>SCORE</span><span>ACCURACY</span><span>TIME</span></div>{sessionStudents.length ? sessionStudents.map((student) => <div className="session-report-row" key={student.studentId}><strong>{student.displayName}</strong><span className={student.completed ? 'complete-pill' : 'waiting-pill'}>{student.completed ? 'Complete' : 'Registered'}</span><span>{student.score ?? '—'}</span><span>{student.accuracy === null ? '—' : `${student.accuracy}%`}</span><span>{student.durationSeconds === null ? '—' : formatTime(student.durationSeconds)}</span></div>) : <p>No students have registered yet.</p>}</div><details className="teacher-key"><summary>Teacher dashboard key</summary><code>{teacherSession.teacherToken}</code><p>Keep this private. You need the session code and this key to reopen the report on another device.</p></details></div> : <><form className="session-form" onSubmit={createClassroomSession}><label>Session title<input value={sessionTitle} onChange={(event) => setSessionTitle(event.target.value)} maxLength={80} required /></label><label>Assignment<select value={sessionTask} onChange={(event) => setSessionTask(event.target.value as TaskMode)}><option value="numbers">Decode numbers</option><option value="words">Crack words</option><option value="sentences">Read sentences</option></select></label><label>Level<select value={sessionLevel} onChange={(event) => setSessionLevel(Number(event.target.value) as 1 | 2 | 3)}><option value={1}>Level 1 · 5 questions</option><option value={2}>Level 2 · 8 questions</option><option value={3}>Level 3 · 10 questions</option></select></label><button className="yellow-button" type="submit">Create session →</button></form><details className="restore-session"><summary>Open an existing teacher dashboard</summary><form onSubmit={restoreTeacherSession}><label>Session code<input value={restoreCode} onChange={(event) => setRestoreCode(event.target.value.toUpperCase())} maxLength={6} /></label><label>Teacher key<input value={restoreKey} onChange={(event) => setRestoreKey(event.target.value)} /></label><button type="submit">Open dashboard</button></form></details></>}{teacherStatus && <p className="classroom-status" role="status">{teacherStatus}</p>}</article>
         <article className="classroom-card student-card"><div className="classroom-card-head"><span>FOR STUDENTS</span><b>02</b></div><form className="session-form" onSubmit={joinClassroomSession}><label>Session code<input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="ABC123" maxLength={6} required /></label><label>Your name<input value={joinName} onChange={(event) => setJoinName(event.target.value)} placeholder="First name and initial" maxLength={32} required /></label><button className="blue-button" type="submit">Join assignment →</button></form>{activeSession && <div className="joined-assignment"><small>YOU ARE REGISTERED</small><strong>{activeSession.title}</strong><span>{activeSession.taskType} · level {activeSession.level}</span></div>}{joinStatus && <p className="classroom-status" role="status">{joinStatus}</p>}</article>
@@ -269,7 +283,7 @@ export default function Home() {
     </section>
 
     <section className="tests-section" id="tests">
-      <div className="section-heading"><div><span className="step-kicker">04 / TEST</span><h2>{activeSession ? 'Complete your assignment.' : 'Choose one task.'}</h2></div><p>{activeSession ? `${activeSession.title} · Session ${activeSession.code}` : 'Pick a task and a level, then decode each set of lamps.'}</p></div>
+      <div className="section-heading"><div><span className="step-kicker">03 / TEST</span><h2>{activeSession ? 'Complete your assignment.' : 'Choose one task.'}</h2></div><p>{activeSession ? `${activeSession.title} · Session ${activeSession.code}` : 'Pick a task and a level, then decode each set of lamps.'}</p></div>
       <div className="task-tabs" role="group" aria-label="Test type">
         {(['numbers','words','sentences'] as TaskMode[]).map((task, index) => <button key={task} disabled={Boolean(activeSession)} aria-pressed={mode === task} className={mode === task ? 'selected' : ''} onClick={() => chooseMode(task)}><span>0{index + 1}</span><strong>{task}</strong><small>{task === 'numbers' ? 'One byte → decimal' : task === 'words' ? 'Bytes → one word' : 'Bytes → one sentence'}</small></button>)}
       </div>
@@ -285,7 +299,7 @@ export default function Home() {
     </section>
 
     <section className="converter-section" id="converter">
-      <div className="section-heading"><div><span className="step-kicker">05 / CREATE</span><h2>Write your own message.</h2></div><p>Write as many sentences as you need. Each character is translated into its ASCII byte and shown as eight lamps.</p></div>
+      <div className="section-heading"><div><span className="step-kicker">04 / CREATE</span><h2>Write your own message.</h2></div><p>Write as many sentences as you need. Each character is translated into its ASCII byte and shown as eight lamps.</p></div>
       <label className="converter-input"><span>YOUR TEXT</span><textarea value={converterText} onChange={(e) => setConverterText(e.target.value)} rows={4} placeholder="TYPE AS MANY SENTENCES AS YOU NEED." /><small>{converterText.length} characters</small></label>
       <div className="format-bar" role="group" aria-label="Message format"><span>FORMAT</span><button type="button" className={exportLayout === 'worksheet' ? 'selected' : ''} aria-pressed={exportLayout === 'worksheet'} onClick={() => setExportLayout('worksheet')}><strong>Task worksheet</strong><small>One byte per row + answer lines</small></button><button type="button" className={exportLayout === 'coded' ? 'selected' : ''} aria-pressed={exportLayout === 'coded'} onClick={() => setExportLayout('coded')}><strong>Coded text</strong><small>Small bytes that wrap like sentences</small></button></div>
       <div className="representation-bar" role="group" aria-label="Code representation"><span>DISPLAY</span><button type="button" className={exportRepresentation === 'bulbs' ? 'selected' : ''} aria-pressed={exportRepresentation === 'bulbs'} onClick={() => setExportRepresentation('bulbs')}><strong>{exportRepresentation === 'bulbs' ? '✓ ' : ''}Lightbulbs</strong><small>Yellow and white lamps</small></button><button type="button" className={exportRepresentation === 'digits' ? 'selected' : ''} aria-pressed={exportRepresentation === 'digits'} onClick={() => setExportRepresentation('digits')}><strong>{exportRepresentation === 'digits' ? '✓ ' : ''}1s and 0s</strong><small>Eight binary digits per character</small></button></div>
@@ -298,7 +312,7 @@ export default function Home() {
     </section>
 
     <section className="results-section" id="results">
-      <div className="section-heading"><div><span className="step-kicker">06 / RESULTS</span><h2>Class performance.</h2></div><p>Every completed test records task, level, score, accuracy, and time.</p></div>
+      <div className="section-heading"><div><span className="step-kicker">05 / RESULTS</span><h2>Class performance.</h2></div><p>Every completed test records task, level, score, accuracy, and time.</p></div>
       <div className="results-card" tabIndex={0} aria-label="Scrollable class results"><div className="results-head"><span>RANK</span><span>STUDENT</span><span>TEST</span><span>LEVEL</span><span>SCORE</span><span>ACCURACY</span><span>TIME</span></div>{leaderboard.length ? leaderboard.map((result, index) => <div className="result-row" key={result.id}><span className={`rank rank-${index + 1}`}>{index + 1}</span><strong>{result.displayName}</strong><span>{result.taskType || 'mixed'}</span><span>{result.level || '—'}</span><b>{result.score}</b><span>{result.accuracy}%</span><span>{formatTime(result.durationSeconds)}</span></div>) : <p className="empty-results">No completed tests yet.</p>}</div>
     </section>
 
@@ -307,6 +321,6 @@ export default function Home() {
       <div className="author-copy"><span className="step-kicker">07 / AUTHOR</span><h2>Dr. Simonas Čepėnas</h2><p>Dr. Simonas Čepėnas earned his PhD in Foreign Affairs and Methods from the University of Virginia. He teaches subjects spanning mathematics, statistics, data science, artificial intelligence, economics, and politics.</p><p>Outside the classroom, he is a husband and the father of two wonderful children.</p><div className="author-fields">MATHEMATICS · STATISTICS · DATA SCIENCE · AI · ECONOMICS · POLITICS</div></div>
     </section>
 
-    <footer><div className="brand"><span className="brand-mark">01</span><span><b>Binary Light Lab</b><small>AI Principles &amp; Applications</small></span></div><p>Dr. Simonas Čepėnas · ISM University of Management and Economics</p><a href="#top">Top ↑</a></footer>
+    <footer><div className="brand"><span className="brand-mark">01</span><span><b>Binary Light Lab</b><small>AI Principles &amp; Applications</small></span></div><a href="#top">Top ↑</a></footer>
   </main>;
 }
