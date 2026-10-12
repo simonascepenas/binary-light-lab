@@ -18,8 +18,12 @@ export async function POST(request: Request) {
     const accuracy = Math.max(0, Math.min(100, Number(body.accuracy) || 0));
     const durationSeconds = Math.max(1, Math.min(7200, Number(body.durationSeconds) || 1));
     const mistakes = Math.max(0, Math.min(100, Number(body.mistakes) || 0));
+    const requestedTaskType = String(body.taskType ?? 'mixed');
+    const taskType = ['numbers', 'words', 'sentences'].includes(requestedTaskType) ? requestedTaskType as 'numbers' | 'words' | 'sentences' : 'mixed';
+    const level = Math.max(0, Math.min(3, Number(body.level) || 0));
+    const questionsTotal = Math.max(1, Math.min(10, Number(body.questionsTotal) || 5));
     if (!displayName) return Response.json({ error: 'Display name is required.' }, { status: 400 });
-    await saveResult({ displayName, classCode, score, accuracy, durationSeconds, mistakes, completedAt: new Date().toISOString() });
+    await saveResult({ displayName, classCode, score, accuracy, durationSeconds, mistakes, taskType, level, questionsTotal, completedAt: new Date().toISOString() });
     return Response.json({ ok: true }, { status: 201 });
   } catch (error) {
     console.error(error);

@@ -14,17 +14,17 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'Binary Light Lab | AI Principles & Applications',
-  description: 'Learn binary, decode bytes, and reveal hidden ASCII words and sentences.',
+  description: 'Separate binary tests for numbers, words, and sentences, plus a text-to-lamps converter.',
   metadataBase: new URL('https://binary-light-lab.workspace-404564.chatgpt.site'),
   openGraph: {
     title: 'Binary Light Lab',
-    description: 'Read the light. Reveal the code.',
+    description: 'Switch on. Decode.',
     images: ['/og.png'],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Binary Light Lab',
-    description: 'Read the light. Reveal the code.',
+    description: 'Switch on. Decode.',
     images: ['/og.png'],
   },
 };

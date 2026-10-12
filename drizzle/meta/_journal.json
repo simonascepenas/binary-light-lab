@@ -15,6 +15,13 @@
       "when": 1791791777686,
       "tag": "0001_blue_wendell_rand",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791793715449,
+      "tag": "0002_yummy_thor_girl",
+      "breakpoints": true
     }
   ]
 }
