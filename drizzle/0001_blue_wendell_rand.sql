@@ -1,0 +1,1 @@
+CREATE INDEX `idx_results_score_duration` ON `results` (`score`,`duration_seconds`);
