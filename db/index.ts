@@ -70,11 +70,6 @@ async function ensureSchema() {
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_session_students_session ON session_students(session_id)`),
     env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_students_participant ON session_students(session_id, participant_token) WHERE participant_token IS NOT NULL`),
   ]);
-  await env.DB.batch([
-    env.DB.prepare(`DELETE FROM results WHERE session_id IN (SELECT id FROM sessions WHERE code = '523L6P' AND title = 'AUTOMATED TEST – 2026-10-13 – SAFE TO DELETE')`),
-    env.DB.prepare(`DELETE FROM session_students WHERE session_id IN (SELECT id FROM sessions WHERE code = '523L6P' AND title = 'AUTOMATED TEST – 2026-10-13 – SAFE TO DELETE')`),
-    env.DB.prepare(`DELETE FROM sessions WHERE code = '523L6P' AND title = 'AUTOMATED TEST – 2026-10-13 – SAFE TO DELETE'`),
-  ]);
 }
 
 export async function saveResult(result: Omit<SavedResult, 'id'>) {
