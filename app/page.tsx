@@ -44,10 +44,10 @@ function Bulb({ on, index, onToggle, compact = false, micro = false }: { on: boo
     {Array.from({ length: 12 }, (_, ray) => <span className={`ray ray-${ray + 1}`} key={ray} />)}
     <span className="bulb-glass"><span className="highlight" /><span className="filament"><i /><i /><i /></span></span>
     <span className="bulb-neck" /><span className="bulb-base"><i /><i /><i /></span>
-    {!compact && !micro && <><strong>{on ? '1' : '0'}</strong><small>{weights[index]}</small></>}
+    {!compact && !micro && <span className="bulb-values"><small>{weights[index]}</small><span>2<sup>{7 - index}</sup></span><strong>{on ? 'ON · 1' : 'OFF · 0'}</strong></span>}
   </>;
-  if (!onToggle) return <span className={`bulb-button static ${on ? 'is-on' : ''} ${compact ? 'compact' : ''} ${micro ? 'micro' : ''}`} aria-label={`${weights[index]} bit, ${on ? 'on' : 'off'}`}>{contents}</span>;
-  return <button className={`bulb-button ${on ? 'is-on' : ''}`} onClick={onToggle} aria-label={`${weights[index]} bit, ${on ? 'on' : 'off'}`} aria-pressed={on}>{contents}</button>;
+  if (!onToggle) return <span className={`bulb-button static ${on ? 'is-on' : ''} ${compact ? 'compact' : ''} ${micro ? 'micro' : ''}`} aria-label={`${weights[index]}, 2 to the power ${7 - index}, ${on ? 'on, 1' : 'off, 0'}`}>{contents}</span>;
+  return <button className={`bulb-button ${on ? 'is-on' : ''}`} onClick={onToggle} aria-label={`${weights[index]}, 2 to the power ${7 - index}, ${on ? 'on, 1' : 'off, 0'}`} aria-pressed={on}>{contents}</button>;
 }
 
 function ByteDisplay({ value, compact = false, micro = false }: { value: number; compact?: boolean; micro?: boolean }) {
@@ -87,6 +87,7 @@ export default function Home() {
   const [leaderboard, setLeaderboard] = useState<Result[]>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [transitioning, setTransitioning] = useState(false);
+  const [showNextPrompt, setShowNextPrompt] = useState(false);
   const [sessionTitle, setSessionTitle] = useState('Binary decoding assignment');
   const [sessionTask, setSessionTask] = useState<TaskMode>('words');
   const [sessionLevel, setSessionLevel] = useState<1 | 2 | 3>(1);
@@ -243,6 +244,7 @@ export default function Home() {
     if (advanceTimer.current) clearTimeout(advanceTimer.current);
     advanceTimer.current = null;
     setTransitioning(false);
+    setShowNextPrompt(false);
   };
 
   const startTest = (event: FormEvent) => {
@@ -271,12 +273,20 @@ export default function Home() {
     const response = answer.toUpperCase().replace(/\s+/g, ' ').trim();
     if (response !== expected) {
       setMistakes((count) => count + 1);
-      setFeedback(mode === 'numbers' ? 'Try again. Add the values below the yellow bulbs.' : 'Try again. Decode each byte, then use the ASCII table.');
+      setTransitioning(true);
+      setFeedback(`Incorrect. The correct answer is ${expected}.`);
+      advanceTimer.current = setTimeout(() => { setShowNextPrompt(true); advanceTimer.current = null; }, 700);
       return;
     }
     setTransitioning(true); setFeedback('Correct.'); setAnswer('');
     if (question === tasks.length - 1) await finishTest(event.timeStamp);
     else advanceTimer.current = setTimeout(() => { setQuestion((currentQuestion) => currentQuestion + 1); setFeedback(''); setTransitioning(false); advanceTimer.current = null; }, 350);
+  };
+
+  const continueAfterAnswer = async (completedAt: number) => {
+    setShowNextPrompt(false); setAnswer(''); setFeedback('');
+    if (question === tasks.length - 1) await finishTest(completedAt);
+    else { setQuestion((currentQuestion) => currentQuestion + 1); setTransitioning(false); }
   };
 
   const chooseMode = (nextMode: TaskMode) => { if (activeSession) return; resetTransition(); setMode(nextMode); setStarted(false); setFinished(false); setQuestion(0); setAnswer(''); setFeedback(''); };
@@ -301,9 +311,9 @@ export default function Home() {
       <div className="lab-card">
         <div className="lab-topline"><div><span className="live-dot" /> TAP THE LAMPS</div><span>MSB <i>→</i> LSB</span></div>
         <div className="bulb-row">{bits.map((bit, index) => <Bulb key={weights[index]} on={bit} index={index} onToggle={() => setBits((currentBits) => currentBits.map((item, i) => i === index ? !item : item))} />)}</div>
-        <div className="equation-row"><div><span>BINARY</span><strong>{bits.map((bit) => bit ? '1' : '0').join('')}</strong></div><span className="equals">=</span><div><span>DECIMAL</span><strong className="decimal-value">{value}</strong></div><div className="calculation">{bits.map((bit, i) => bit ? weights[i] : null).filter(Boolean).join(' + ') || '0'} = <b>{value}</b></div></div>
+        <div className="equation-row"><div><span>BINARY</span><strong>{bits.map((bit) => bit ? '1' : '0').join('')}</strong></div><span className="equals">=</span><div><span>DECIMAL</span><strong className="decimal-value">{value}</strong></div><div className="calculation" aria-label={`Binary expansion equals ${value}`}>{bits.map((bit, index) => <Fragment key={weights[index]}><span>2<sup>{7 - index}</sup> × {bit ? 1 : 0}</span>{index < bits.length - 1 && <i>+</i>}</Fragment>)}<i>=</i><b>{value}</b></div></div>
       </div>
-      <div className="three-steps"><p><b>1.</b> Find every yellow bulb.</p><p><b>2.</b> Keep its place value.</p><p><b>3.</b> Add the values.</p></div>
+      <div className="three-steps"><p><b>1.</b> Read each bulb as 0 or 1.</p><p><b>2.</b> Multiply each power of two by its bit.</p><p><b>3.</b> Add all eight products.</p></div>
     </section>
 
     <section className="ascii-section" id="ascii">
@@ -331,7 +341,7 @@ export default function Home() {
       : <div className="challenge-card">
         <div className="challenge-head"><div><span>QUESTION {question + 1} / {tasks.length}</span><strong>{mode.toUpperCase()} · LEVEL {level}</strong></div><div className="progress-track"><i style={{ width: `${(question / tasks.length) * 100}%` }} /></div><div><small>ERRORS</small><b>{mistakes}</b></div></div>
         <div tabIndex={0} aria-label="Scrollable encoded bytes" className={`challenge-bytes ${currentBytes.length > 7 ? 'sentence-bytes' : ''}`}>{currentBytes.map((byte, index) => <div className="byte-challenge" key={`${byte}-${index}`}><ByteDisplay value={byte} compact /><small>{typeof current === 'string' && current[index] === ' ' ? 'SPACE' : `BYTE ${index + 1}`}</small></div>)}</div>
-        <form className="answer-form" onSubmit={submitAnswer}><label>{mode === 'numbers' ? 'Decimal number' : mode === 'words' ? 'Hidden word' : 'Hidden sentence'}<div><input disabled={transitioning} value={answer} onChange={(e) => setAnswer(e.target.value)} inputMode={mode === 'numbers' ? 'numeric' : 'text'} autoFocus placeholder="Your answer" /><button disabled={transitioning} type="submit">Check</button></div></label>{feedback && <p role="status" aria-live="polite" className={feedback === 'Correct.' ? 'correct' : 'try-again'}>{feedback}</p>}</form>
+        <form className="answer-form" onSubmit={submitAnswer}><label>{mode === 'numbers' ? 'Decimal number' : mode === 'words' ? 'Hidden word' : 'Hidden sentence'}<div><input disabled={transitioning} value={answer} onChange={(e) => setAnswer(e.target.value)} inputMode={mode === 'numbers' ? 'numeric' : 'text'} autoFocus placeholder="Your answer" />{showNextPrompt ? <button className="next-question-button" type="button" onClick={(event) => void continueAfterAnswer(event.timeStamp)}>{question === tasks.length - 1 ? 'See results →' : 'Next question →'}</button> : <button disabled={transitioning} type="submit">Check</button>}</div></label>{feedback && <p role="status" aria-live="polite" className={feedback === 'Correct.' ? 'correct' : 'try-again'}>{feedback}</p>}</form>
       </div>}
     </section>
 
