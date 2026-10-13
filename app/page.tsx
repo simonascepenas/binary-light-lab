@@ -31,6 +31,7 @@ const taskBank = {
 type TaskMode = keyof typeof taskBank;
 type Result = { id: number; displayName: string; classCode: string; taskType: TaskMode; level: number; questionsTotal: number; score: number; accuracy: number; durationSeconds: number };
 type ClassroomSession = { code: string; title: string; taskType: TaskMode; level: 1 | 2 | 3; createdAt: string };
+type JoinedStudent = { id: number; displayName: string };
 type TeacherSession = ClassroomSession & { teacherToken: string };
 type SessionStudent = { studentId: number; displayName: string; joinedAt: string; completed: number; score: number | null; accuracy: number | null; durationSeconds: number | null; mistakes: number | null; completedAt: string | null };
 
@@ -99,7 +100,9 @@ export default function Home() {
   const [joinCode, setJoinCode] = useState('');
   const [joinName, setJoinName] = useState('');
   const [joinStatus, setJoinStatus] = useState('');
+  const [joinSubmitting, setJoinSubmitting] = useState(false);
   const [activeSession, setActiveSession] = useState<ClassroomSession | null>(null);
+  const [activeStudentId, setActiveStudentId] = useState<number | null>(null);
   const [activeSection, setActiveSection] = useState('');
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deferredConverterText = useDeferredValue(converterText);
@@ -137,12 +140,17 @@ export default function Home() {
         .map((id) => document.getElementById(id))
         .filter((section): section is HTMLElement => Boolean(section));
 
+      const marker = Math.min(window.innerHeight * 0.32, 240);
+      if (sections[0] && sections[0].getBoundingClientRect().top > marker) {
+        setActiveSection('');
+        return;
+      }
+
       if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
         setActiveSection('about');
         return;
       }
 
-      const marker = Math.min(window.innerHeight * 0.32, 240);
       const current = sections.find((section) => {
         const bounds = section.getBoundingClientRect();
         return bounds.top <= marker && bounds.bottom > marker;
@@ -222,15 +230,26 @@ export default function Home() {
   };
 
   const joinClassroomSession = async (event: FormEvent) => {
-    event.preventDefault(); setJoinStatus('Joining session…');
+    event.preventDefault();
+    if (joinSubmitting) return;
+    setJoinSubmitting(true); setJoinStatus('Joining session…');
     try {
-      const response = await fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'join', code: joinCode, displayName: joinName }) });
+      const normalizedCode = joinCode.trim().toUpperCase();
+      const storageKey = `binary-light-participant-${normalizedCode}-${joinName.trim().toLocaleLowerCase()}`;
+      let participantToken = window.sessionStorage.getItem(storageKey);
+      if (!participantToken) {
+        participantToken = crypto.randomUUID();
+        window.sessionStorage.setItem(storageKey, participantToken);
+      }
+      const response = await fetch(apiUrl('/api/sessions'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'join', code: normalizedCode, displayName: joinName, participantToken }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Could not join the session.');
       const joined = data.session as ClassroomSession;
-      setActiveSession(joined); setDisplayName(joinName.trim()); setClassCode(joined.code); setMode(joined.taskType); setLevel(joined.level); setStarted(false); setFinished(false); setJoinStatus('Registered. Your assignment is ready below.');
+      const student = data.student as JoinedStudent;
+      setActiveSession(joined); setActiveStudentId(student.id); setDisplayName(student.displayName); setClassCode(joined.code); setMode(joined.taskType); setLevel(joined.level); setStarted(false); setFinished(false); setJoinStatus(student.displayName === joinName.trim() ? 'Registered. Your assignment is ready below.' : `Registered as ${student.displayName}. Your assignment is ready below.`);
       window.setTimeout(() => document.getElementById('tests')?.scrollIntoView({ behavior: 'smooth' }), 250);
     } catch (error) { setJoinStatus(error instanceof Error ? error.message : 'Could not join the session.'); }
+    finally { setJoinSubmitting(false); }
   };
 
   const downloadSessionReport = () => {
@@ -259,7 +278,7 @@ export default function Home() {
     const finalAccuracy = Math.round((tasks.length / (tasks.length + mistakes)) * 100);
     setDuration(elapsed); setScore(finalScore); setFinished(true); setSaveStatus('saving');
     try {
-      const response = await fetch(apiUrl('/api/results'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName, classCode, taskType: mode, level, questionsTotal: tasks.length, score: finalScore, accuracy: finalAccuracy, durationSeconds: elapsed, mistakes }) });
+      const response = await fetch(apiUrl('/api/results'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName, classCode, studentId: activeStudentId, taskType: mode, level, questionsTotal: tasks.length, score: finalScore, accuracy: finalAccuracy, durationSeconds: elapsed, mistakes }) });
       if (!response.ok) throw new Error('Save failed');
       setSaveStatus('saved');
       await loadResults(classCode.trim());
@@ -271,6 +290,10 @@ export default function Home() {
     if (transitioning) return;
     const expected = String(current).toUpperCase().replace(/\s+/g, ' ').trim();
     const response = answer.toUpperCase().replace(/\s+/g, ' ').trim();
+    if (!response) {
+      setFeedback('Enter an answer first.');
+      return;
+    }
     if (response !== expected) {
       setMistakes((count) => count + 1);
       setTransitioning(true);
@@ -292,12 +315,14 @@ export default function Home() {
   const chooseMode = (nextMode: TaskMode) => { if (activeSession) return; resetTransition(); setMode(nextMode); setStarted(false); setFinished(false); setQuestion(0); setAnswer(''); setFeedback(''); };
   const chooseLevel = (nextLevel: 1 | 2 | 3) => { if (activeSession) return; resetTransition(); setLevel(nextLevel); setStarted(false); setFinished(false); setQuestion(0); setAnswer(''); setFeedback(''); };
 
-  return <main>
+  return <>
     <header className="topbar">
       <a className="brand" href="#top" aria-label="Binary Light Lab home"><span className="brand-mark">01</span><span><b>Binary Light Lab</b><small>AI Principles &amp; Applications</small></span></a>
       <nav aria-label="Primary navigation">{[['learn','Learn'],['ascii','ASCII'],['tests','Tests'],['converter','Converter'],['results','Results'],['classroom','Classroom'],['about','About']].map(([id, label]) => <a key={id} className={activeSection === id ? 'active' : ''} aria-current={activeSection === id ? 'location' : undefined} href={`#${id}`}>{label}</a>)}</nav>
       <div className="course-chip">Dr. Simonas Čepėnas</div>
     </header>
+
+    <main>
 
     <section className="hero" id="top">
       <div className="eyebrow">BINARY, MADE VISIBLE</div><h1>Switch on.<br /><em>Decode.</em></h1>
@@ -321,27 +346,19 @@ export default function Home() {
       <AsciiTable />
     </section>
 
-    <section className="classroom-section" id="classroom">
-      <div className="section-heading"><div><span className="step-kicker">06 / CLASSROOM</span><h2>Run a class session.</h2></div><p>Create one assignment, share its short code, and watch students register and complete it. The report updates automatically.</p></div>
-      <div className="classroom-grid">
-        <article className="classroom-card teacher-card"><div className="classroom-card-head"><span>FOR TEACHERS</span><b>01</b></div>{teacherSession ? <div className="teacher-dashboard"><div className="session-identity"><div><small>STUDENT CODE</small><strong>{teacherSession.code}</strong></div><div><small>ASSIGNMENT</small><b>{teacherSession.title}</b><span>{teacherSession.taskType} · level {teacherSession.level}</span></div></div><div className="session-summary"><div><strong>{sessionStudents.length}</strong><span>registered</span></div><div><strong>{sessionStudents.filter((student) => student.completed).length}</strong><span>completed</span></div><div><strong>{sessionStudents.length ? Math.round(sessionStudents.filter((student) => student.accuracy !== null).reduce((sum, student) => sum + (student.accuracy ?? 0), 0) / Math.max(1, sessionStudents.filter((student) => student.accuracy !== null).length)) : 0}%</strong><span>avg. accuracy</span></div></div><div className="teacher-actions"><button type="button" onClick={() => navigator.clipboard?.writeText(teacherSession.code)}>Copy student code</button><button type="button" onClick={downloadSessionReport} disabled={!sessionStudents.length}>Download CSV report</button><button type="button" className="quiet-button" onClick={() => { setTeacherSession(null); setSessionStudents([]); setTeacherStatus(''); window.localStorage.removeItem('binary-light-teacher-session'); }}>Close dashboard</button></div><div className="session-report" tabIndex={0}><div className="session-report-head"><span>STUDENT</span><span>STATUS</span><span>SCORE</span><span>ACCURACY</span><span>TIME</span></div>{sessionStudents.length ? sessionStudents.map((student) => <div className="session-report-row" key={student.studentId}><strong>{student.displayName}</strong><span className={student.completed ? 'complete-pill' : 'waiting-pill'}>{student.completed ? 'Complete' : 'Registered'}</span><span>{student.score ?? '—'}</span><span>{student.accuracy === null ? '—' : `${student.accuracy}%`}</span><span>{student.durationSeconds === null ? '—' : formatTime(student.durationSeconds)}</span></div>) : <p>No students have registered yet.</p>}</div><details className="teacher-key"><summary>Teacher dashboard key</summary><code>{teacherSession.teacherToken}</code><p>Keep this private. You need the session code and this key to reopen the report on another device.</p></details></div> : <><form className="session-form" onSubmit={createClassroomSession}><label>Session title<input value={sessionTitle} onChange={(event) => setSessionTitle(event.target.value)} maxLength={80} required /></label><label>Assignment<select value={sessionTask} onChange={(event) => setSessionTask(event.target.value as TaskMode)}><option value="numbers">Decode numbers</option><option value="words">Crack words</option><option value="sentences">Read sentences</option></select></label><label>Level<select value={sessionLevel} onChange={(event) => setSessionLevel(Number(event.target.value) as 1 | 2 | 3)}><option value={1}>Level 1 · 5 questions</option><option value={2}>Level 2 · 8 questions</option><option value={3}>Level 3 · 10 questions</option></select></label><button className="yellow-button" type="submit">Create session →</button></form><details className="restore-session"><summary>Open an existing teacher dashboard</summary><form onSubmit={restoreTeacherSession}><label>Session code<input value={restoreCode} onChange={(event) => setRestoreCode(event.target.value.toUpperCase())} maxLength={6} /></label><label>Teacher key<input value={restoreKey} onChange={(event) => setRestoreKey(event.target.value)} /></label><button type="submit">Open dashboard</button></form></details></>}{teacherStatus && <p className="classroom-status" role="status">{teacherStatus}</p>}</article>
-        <article className="classroom-card student-card"><div className="classroom-card-head"><span>FOR STUDENTS</span><b>02</b></div><form className="session-form" onSubmit={joinClassroomSession}><label>Session code<input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="ABC123" maxLength={6} required /></label><label>Your name<input value={joinName} onChange={(event) => setJoinName(event.target.value)} placeholder="First name and initial" maxLength={32} required /></label><button className="blue-button" type="submit">Join assignment →</button></form>{activeSession && <div className="joined-assignment"><small>YOU ARE REGISTERED</small><strong>{activeSession.title}</strong><span>{activeSession.taskType} · level {activeSession.level}</span></div>}{joinStatus && <p className="classroom-status" role="status">{joinStatus}</p>}</article>
-      </div>
-    </section>
-
     <section className="tests-section" id="tests">
       <div className="section-heading"><div><span className="step-kicker">03 / TEST</span><h2>{activeSession ? 'Complete your assignment.' : 'Choose one task.'}</h2></div><p>{activeSession ? `${activeSession.title} · Session ${activeSession.code}` : 'Pick a task and a level, then decode each set of lamps.'}</p></div>
       <div className="task-tabs" role="group" aria-label="Test type">
         {(['numbers','words','sentences'] as TaskMode[]).map((task, index) => <button key={task} disabled={Boolean(activeSession)} aria-pressed={mode === task} className={mode === task ? 'selected' : ''} onClick={() => chooseMode(task)}><span>0{index + 1}</span><strong>{task}</strong><small>{task === 'numbers' ? 'One byte → decimal' : task === 'words' ? 'Bytes → one word' : 'Bytes → one sentence'}</small></button>)}
       </div>
-      <div className="level-bar"><span>LEVEL</span>{([1,2,3] as const).map((item) => <button key={item} disabled={Boolean(activeSession)} className={level === item ? 'selected' : ''} onClick={() => chooseLevel(item)}>{item}<small>{taskBank[mode][item].length} questions</small></button>)}</div>
+      <div className="level-bar" role="group" aria-label="Test level"><span>LEVEL</span>{([1,2,3] as const).map((item) => <button key={item} disabled={Boolean(activeSession)} aria-pressed={level === item} className={level === item ? 'selected' : ''} onClick={() => chooseLevel(item)}>{item}<small>{taskBank[mode][item].length} questions</small></button>)}</div>
 
       {!started ? <form className="start-card" onSubmit={startTest}><div><span className="test-label">{mode.toUpperCase()} · LEVEL {level}</span><h3>{tasks.length} questions</h3><p>{mode === 'numbers' ? 'Decode each byte into a decimal number.' : mode === 'words' ? 'Decode every group of bytes into a word.' : 'Decode each line of bytes into a sentence.'}</p></div><label>Display name or initials<input value={displayName} readOnly={Boolean(activeSession)} onChange={(e) => setDisplayName(e.target.value)} maxLength={32} placeholder="e.g. Ada L." required /></label><label>Class code <small>{activeSession ? '(session)' : '(optional)'}</small><input value={classCode} readOnly={Boolean(activeSession)} onChange={(e) => setClassCode(e.target.value)} maxLength={20} placeholder="e.g. AI-01" /></label><button className="yellow-button" type="submit">Start test →</button></form>
       : finished ? <div className="finish-card"><span className="trophy">✓</span><div><span className="step-kicker">TEST COMPLETE</span><h3>{mode} · level {level}</h3><p role="status">{saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Result saved.' : saveStatus === 'error' ? 'Result could not be saved.' : ''}</p></div><div className="finish-stat"><small>SCORE</small><strong>{score}</strong></div><div className="finish-stat"><small>ACCURACY</small><strong>{accuracy}%</strong></div><div className="finish-stat"><small>TIME</small><strong>{formatTime(duration)}</strong></div><button onClick={() => { resetTransition(); setStarted(false); }}>New test</button></div>
       : <div className="challenge-card">
         <div className="challenge-head"><div><span>QUESTION {question + 1} / {tasks.length}</span><strong>{mode.toUpperCase()} · LEVEL {level}</strong></div><div className="progress-track"><i style={{ width: `${(question / tasks.length) * 100}%` }} /></div><div><small>ERRORS</small><b>{mistakes}</b></div></div>
         <div tabIndex={0} aria-label="Scrollable encoded bytes" className={`challenge-bytes ${currentBytes.length > 7 ? 'sentence-bytes' : ''}`}>{currentBytes.map((byte, index) => <div className="byte-challenge" key={`${byte}-${index}`}><ByteDisplay value={byte} compact /><small>{typeof current === 'string' && current[index] === ' ' ? 'SPACE' : `BYTE ${index + 1}`}</small></div>)}</div>
-        <form className="answer-form" onSubmit={submitAnswer}><label>{mode === 'numbers' ? 'Decimal number' : mode === 'words' ? 'Hidden word' : 'Hidden sentence'}<div><input disabled={transitioning} value={answer} onChange={(e) => setAnswer(e.target.value)} inputMode={mode === 'numbers' ? 'numeric' : 'text'} autoFocus placeholder="Your answer" />{showNextPrompt ? <button className="next-question-button" type="button" onClick={(event) => void continueAfterAnswer(event.timeStamp)}>{question === tasks.length - 1 ? 'See results →' : 'Next question →'}</button> : <button disabled={transitioning} type="submit">Check</button>}</div></label>{feedback && <p role="status" aria-live="polite" className={feedback === 'Correct.' ? 'correct' : 'try-again'}>{feedback}</p>}</form>
+        <form className="answer-form" onSubmit={submitAnswer}><label>{mode === 'numbers' ? 'Decimal number' : mode === 'words' ? 'Hidden word' : 'Hidden sentence'}<div><input required disabled={transitioning} value={answer} onChange={(e) => setAnswer(e.target.value)} inputMode={mode === 'numbers' ? 'numeric' : 'text'} autoFocus placeholder="Your answer" />{showNextPrompt ? <button className="next-question-button" type="button" onClick={(event) => void continueAfterAnswer(event.timeStamp)}>{question === tasks.length - 1 ? 'See results →' : 'Next question →'}</button> : <button disabled={transitioning} type="submit">Check</button>}</div></label>{feedback && <p role="status" aria-live="polite" className={feedback === 'Correct.' ? 'correct' : 'try-again'}>{feedback}</p>}</form>
       </div>}
     </section>
 
@@ -363,13 +380,22 @@ export default function Home() {
       <div className="results-card" tabIndex={0} aria-label="Scrollable class results"><div className="results-head"><span>RANK</span><span>STUDENT</span><span>TEST</span><span>LEVEL</span><span>SCORE</span><span>ACCURACY</span><span>TIME</span></div>{leaderboard.length ? leaderboard.map((result, index) => <div className="result-row" key={result.id}><span className={`rank rank-${index + 1}`}>{index + 1}</span><strong>{result.displayName}</strong><span>{result.taskType || 'mixed'}</span><span>{result.level || '—'}</span><b>{result.score}</b><span>{result.accuracy}%</span><span>{formatTime(result.durationSeconds)}</span></div>) : <p className="empty-results">No completed tests yet.</p>}</div>
     </section>
 
+    <section className="classroom-section" id="classroom">
+      <div className="section-heading"><div><span className="step-kicker">06 / CLASSROOM</span><h2>Run a class session.</h2></div><p>Create one assignment, share its short code, and watch students register and complete it. The report updates automatically.</p></div>
+      <div className="classroom-grid">
+        <article className="classroom-card teacher-card"><div className="classroom-card-head"><span>FOR TEACHERS</span><b>01</b></div>{teacherSession ? <div className="teacher-dashboard"><div className="session-identity"><div><small>STUDENT CODE</small><strong>{teacherSession.code}</strong></div><div><small>ASSIGNMENT</small><b>{teacherSession.title}</b><span>{teacherSession.taskType} · level {teacherSession.level}</span></div></div><div className="session-summary"><div><strong>{sessionStudents.length}</strong><span>registered</span></div><div><strong>{sessionStudents.filter((student) => student.completed).length}</strong><span>completed</span></div><div><strong>{sessionStudents.length ? Math.round(sessionStudents.filter((student) => student.accuracy !== null).reduce((sum, student) => sum + (student.accuracy ?? 0), 0) / Math.max(1, sessionStudents.filter((student) => student.accuracy !== null).length)) : 0}%</strong><span>avg. accuracy</span></div></div><div className="teacher-actions"><button type="button" onClick={() => navigator.clipboard?.writeText(teacherSession.code)}>Copy student code</button><button type="button" onClick={downloadSessionReport} disabled={!sessionStudents.length}>Download CSV report</button><button type="button" className="quiet-button" onClick={() => { setTeacherSession(null); setSessionStudents([]); setTeacherStatus(''); window.localStorage.removeItem('binary-light-teacher-session'); }}>Close dashboard</button></div><div className="session-report" tabIndex={0}><div className="session-report-head"><span>STUDENT</span><span>STATUS</span><span>SCORE</span><span>ACCURACY</span><span>TIME</span></div>{sessionStudents.length ? sessionStudents.map((student) => <div className="session-report-row" key={student.studentId}><strong>{student.displayName}</strong><span className={student.completed ? 'complete-pill' : 'waiting-pill'}>{student.completed ? 'Complete' : 'Registered'}</span><span>{student.score ?? '—'}</span><span>{student.accuracy === null ? '—' : `${student.accuracy}%`}</span><span>{student.durationSeconds === null ? '—' : formatTime(student.durationSeconds)}</span></div>) : <p>No students have registered yet.</p>}</div><details className="teacher-key"><summary>Teacher dashboard key</summary><code>{teacherSession.teacherToken}</code><p>Keep this private. You need the session code and this key to reopen the report on another device.</p></details></div> : <><form className="session-form" onSubmit={createClassroomSession}><label>Session title<input value={sessionTitle} onChange={(event) => setSessionTitle(event.target.value)} maxLength={80} required /></label><label>Assignment<select value={sessionTask} onChange={(event) => setSessionTask(event.target.value as TaskMode)}><option value="numbers">Decode numbers</option><option value="words">Crack words</option><option value="sentences">Read sentences</option></select></label><label>Level<select value={sessionLevel} onChange={(event) => setSessionLevel(Number(event.target.value) as 1 | 2 | 3)}><option value={1}>Level 1 · 5 questions</option><option value={2}>Level 2 · 8 questions</option><option value={3}>Level 3 · 10 questions</option></select></label><button className="yellow-button" type="submit">Create session →</button></form><details className="restore-session"><summary>Open an existing teacher dashboard</summary><form onSubmit={restoreTeacherSession}><label>Session code<input value={restoreCode} onChange={(event) => setRestoreCode(event.target.value.toUpperCase())} maxLength={6} /></label><label>Teacher key<input value={restoreKey} onChange={(event) => setRestoreKey(event.target.value)} /></label><button type="submit">Open dashboard</button></form></details></>}{teacherStatus && <p className="classroom-status" role="status">{teacherStatus}</p>}</article>
+        <article className="classroom-card student-card"><div className="classroom-card-head"><span>FOR STUDENTS</span><b>02</b></div><form className="session-form" onSubmit={joinClassroomSession}><label>Session code<input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="ABC123" maxLength={6} required /></label><label>Your name<input value={joinName} onChange={(event) => setJoinName(event.target.value)} placeholder="First name and initial" maxLength={32} required /></label><button className="blue-button" type="submit" disabled={joinSubmitting}>{joinSubmitting ? 'Joining…' : 'Join assignment →'}</button></form>{activeSession && <div className="joined-assignment"><small>YOU ARE REGISTERED</small><strong>{activeSession.title}</strong><span>{activeSession.taskType} · level {activeSession.level}</span></div>}{joinStatus && <p className="classroom-status" role="status">{joinStatus}</p>}</article>
+      </div>
+    </section>
+
     <section className="author-section" id="about">
       {/* A relative native image path works on both the root Site and GitHub Pages subpath. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <div className="author-photo"><img src="author-simonas-cepenas.webp" alt="Dr. Simonas Čepėnas" width={1500} height={1000} /></div>
       <div className="author-copy"><span className="step-kicker">07 / AUTHOR</span><h2>Dr. Simonas Čepėnas</h2><p>Dr. Simonas Čepėnas earned his PhD in Foreign Affairs and Methods from the University of Virginia. He teaches subjects spanning mathematics, statistics, data science, artificial intelligence, economics, and politics.</p><p>Outside the classroom, he is a husband and the father of two wonderful children.</p><div className="author-fields">MATHEMATICS · STATISTICS · DATA SCIENCE · AI · ECONOMICS · POLITICS</div></div>
     </section>
+    </main>
 
     <footer><div className="brand"><span className="brand-mark">01</span><span><b>Binary Light Lab</b><small>AI Principles &amp; Applications</small></span></div><a href="#top">Top ↑</a></footer>
-  </main>;
+  </>;
 }

@@ -18,6 +18,8 @@ export async function POST(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     const displayName = String(body.displayName ?? '').trim().slice(0, 32);
     const classCode = String(body.classCode ?? '').trim().slice(0, 20);
+    const requestedStudentId = Number(body.studentId);
+    const studentId = Number.isInteger(requestedStudentId) && requestedStudentId > 0 ? requestedStudentId : null;
     const durationSeconds = Math.max(1, Math.min(7200, Number(body.durationSeconds) || 1));
     const mistakes = Math.max(0, Math.min(100, Number(body.mistakes) || 0));
     const requestedTaskType = String(body.taskType ?? '');
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
     const score = Math.max(100, 1000 - durationSeconds - mistakes * 35);
     const accuracy = Math.round((questionsTotal / (questionsTotal + mistakes)) * 100);
     if (!displayName) return corsJson(request, { error: 'Display name is required.' }, { status: 400 });
-    await saveResult({ displayName, classCode, score, accuracy, durationSeconds, mistakes, taskType, level, questionsTotal, completedAt: new Date().toISOString() });
+    await saveResult({ displayName, classCode, studentId, score, accuracy, durationSeconds, mistakes, taskType, level, questionsTotal, completedAt: new Date().toISOString() });
     return corsJson(request, { ok: true }, { status: 201 });
   } catch (error) {
     console.error(error);

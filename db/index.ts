@@ -61,10 +61,19 @@ async function ensureSchema() {
   if (!columns.has('questions_total')) await env.DB.prepare('ALTER TABLE results ADD COLUMN questions_total INTEGER NOT NULL DEFAULT 5').run();
   if (!columns.has('session_id')) await env.DB.prepare('ALTER TABLE results ADD COLUMN session_id INTEGER').run();
   if (!columns.has('student_id')) await env.DB.prepare('ALTER TABLE results ADD COLUMN student_id INTEGER').run();
+  const studentInfo = await env.DB.prepare('PRAGMA table_info(session_students)').all<{ name: string }>();
+  const studentColumns = new Set(studentInfo.results.map((column) => column.name));
+  if (!studentColumns.has('participant_token')) await env.DB.prepare('ALTER TABLE session_students ADD COLUMN participant_token TEXT').run();
   await env.DB.batch([
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_results_score_duration ON results(score DESC, duration_seconds ASC)`),
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_results_session_student ON results(session_id, student_id)`),
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_session_students_session ON session_students(session_id)`),
+    env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_students_participant ON session_students(session_id, participant_token) WHERE participant_token IS NOT NULL`),
+  ]);
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM results WHERE session_id IN (SELECT id FROM sessions WHERE code = '523L6P' AND title = 'AUTOMATED TEST – 2026-10-13 – SAFE TO DELETE')`),
+    env.DB.prepare(`DELETE FROM session_students WHERE session_id IN (SELECT id FROM sessions WHERE code = '523L6P' AND title = 'AUTOMATED TEST – 2026-10-13 – SAFE TO DELETE')`),
+    env.DB.prepare(`DELETE FROM sessions WHERE code = '523L6P' AND title = 'AUTOMATED TEST – 2026-10-13 – SAFE TO DELETE'`),
   ]);
 }
 
@@ -72,20 +81,24 @@ export async function saveResult(result: Omit<SavedResult, 'id'>) {
   await ensureSchema();
   let sessionId: number | null = null;
   let studentId: number | null = null;
+  let verifiedDisplayName = result.displayName;
   if (result.classCode) {
     const session = await env.DB.prepare('SELECT id, task_type AS taskType, level FROM sessions WHERE code = ?').bind(result.classCode.toUpperCase()).first<{ id: number; taskType: string; level: number }>();
     if (session) {
       if (session.taskType !== result.taskType || session.level !== result.level) throw new Error('This result does not match the session assignment.');
-      const student = await env.DB.prepare('SELECT id FROM session_students WHERE session_id = ? AND display_name = ? COLLATE NOCASE').bind(session.id, result.displayName).first<{ id: number }>();
+      const student = result.studentId
+        ? await env.DB.prepare('SELECT id, display_name AS displayName FROM session_students WHERE session_id = ? AND id = ?').bind(session.id, result.studentId).first<{ id: number; displayName: string }>()
+        : await env.DB.prepare('SELECT id, display_name AS displayName FROM session_students WHERE session_id = ? AND display_name = ? COLLATE NOCASE').bind(session.id, result.displayName).first<{ id: number; displayName: string }>();
       if (!student) throw new Error('Join the session before submitting the assignment.');
       sessionId = session.id;
       studentId = student.id;
+      verifiedDisplayName = student.displayName;
     }
   }
   return env.DB.prepare(`INSERT INTO results
     (display_name, class_code, score, accuracy, duration_seconds, mistakes, task_type, level, questions_total, completed_at, session_id, student_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(result.displayName, result.classCode, result.score, result.accuracy, result.durationSeconds, result.mistakes, result.taskType, result.level, result.questionsTotal, result.completedAt, sessionId, studentId)
+    .bind(verifiedDisplayName, result.classCode, result.score, result.accuracy, result.durationSeconds, result.mistakes, result.taskType, result.level, result.questionsTotal, result.completedAt, sessionId, studentId)
     .run();
 }
 
@@ -114,14 +127,22 @@ export async function getPublicSession(code: string): Promise<ClassroomSession |
     .bind(code.toUpperCase()).first<ClassroomSession>();
 }
 
-export async function joinSession(code: string, displayName: string) {
+export async function joinSession(code: string, displayName: string, participantToken: string) {
   const session = await getPublicSession(code);
   if (!session) return null;
-  await env.DB.prepare(`INSERT INTO session_students (session_id, display_name, joined_at) VALUES (?, ?, ?)
-    ON CONFLICT(session_id, display_name) DO NOTHING`).bind(session.id, displayName, new Date().toISOString()).run();
-  const student = await env.DB.prepare('SELECT id, display_name AS displayName FROM session_students WHERE session_id = ? AND display_name = ? COLLATE NOCASE')
-    .bind(session.id, displayName).first<{ id: number; displayName: string }>();
-  return { session, student };
+  const existing = await env.DB.prepare('SELECT id, display_name AS displayName FROM session_students WHERE session_id = ? AND participant_token = ?')
+    .bind(session.id, participantToken).first<{ id: number; displayName: string }>();
+  if (existing) return { session, student: existing };
+  for (let suffix = 1; suffix <= 99; suffix += 1) {
+    const candidate = suffix === 1 ? displayName : `${displayName.slice(0, Math.max(1, 27 - String(suffix).length))} (${suffix})`;
+    const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO session_students (session_id, display_name, joined_at, participant_token) VALUES (?, ?, ?, ?) RETURNING id, display_name AS displayName`)
+      .bind(session.id, candidate, new Date().toISOString(), participantToken).first<{ id: number; displayName: string }>();
+    if (inserted) return { session, student: inserted };
+    const participant = await env.DB.prepare('SELECT id, display_name AS displayName FROM session_students WHERE session_id = ? AND participant_token = ?')
+      .bind(session.id, participantToken).first<{ id: number; displayName: string }>();
+    if (participant) return { session, student: participant };
+  }
+  throw new Error('Could not create a unique student name.');
 }
 
 export async function getSessionReport(code: string, teacherToken: string) {

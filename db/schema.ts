@@ -18,8 +18,10 @@ export const sessionStudents = sqliteTable('session_students', {
   sessionId: integer('session_id').notNull(),
   displayName: text('display_name').notNull(),
   joinedAt: text('joined_at').notNull(),
+  participantToken: text('participant_token'),
 }, (table) => [
   uniqueIndex('idx_session_students_session_name').on(table.sessionId, table.displayName),
+  uniqueIndex('idx_session_students_participant').on(table.sessionId, table.participantToken),
 ]);
 
 export const results = sqliteTable('results', {

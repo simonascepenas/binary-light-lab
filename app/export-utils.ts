@@ -166,8 +166,49 @@ function pdfEscape(value: string) {
   return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
+function pdfCharacterWidth(character: string, size: number, mono: boolean) {
+  if (mono) return size * 0.6;
+  if (character === ' ') return size * 0.28;
+  if (/[ilI.,'!|]/.test(character)) return size * 0.28;
+  if (/[mwMW@]/.test(character)) return size * 0.82;
+  return size * 0.56;
+}
+
+function pdfAccent(mark: string, centerX: number, baselineY: number, size: number, gray: number) {
+  const top = baselineY + size * 0.93;
+  const half = Math.max(1.3, size * 0.13);
+  const stroke = Math.max(0.45, size * 0.045);
+  const color = `${gray} ${gray} ${gray}`;
+  if (mark === '\u030C') return `${color} RG ${stroke} w ${centerX - half} ${top + half * .45} m ${centerX} ${top - half * .45} l ${centerX + half} ${top + half * .45} l S\n`;
+  if (mark === '\u0302') return `${color} RG ${stroke} w ${centerX - half} ${top - half * .35} m ${centerX} ${top + half * .55} l ${centerX + half} ${top - half * .35} l S\n`;
+  if (mark === '\u0307') return `${color} rg ${centerX - stroke} ${top} ${stroke * 2} ${stroke * 2} re f\n`;
+  if (mark === '\u0301') return `${color} RG ${stroke} w ${centerX - half * .35} ${top} m ${centerX + half * .65} ${top + half} l S\n`;
+  if (mark === '\u0300') return `${color} RG ${stroke} w ${centerX - half * .65} ${top + half} m ${centerX + half * .35} ${top} l S\n`;
+  if (mark === '\u0308') return `${color} rg ${centerX - half} ${top} ${stroke * 1.6} ${stroke * 1.6} re f ${centerX + half - stroke * 1.6} ${top} ${stroke * 1.6} ${stroke * 1.6} re f\n`;
+  if (mark === '\u0304') return `${color} RG ${stroke} w ${centerX - half} ${top + half * .3} m ${centerX + half} ${top + half * .3} l S\n`;
+  if (mark === '\u0303') return `${color} RG ${stroke} w ${centerX - half} ${top} m ${centerX - half * .35} ${top + half * .6} ${centerX + half * .35} ${top - half * .25} ${centerX + half} ${top + half * .35} c S\n`;
+  return '';
+}
+
 function pdfText(value: string, x: number, y: number, size = 10, bold = false, mono = false, gray = 0) {
-  return `${gray} ${gray} ${gray} rg BT /${mono ? 'F3' : bold ? 'F2' : 'F1'} ${size} Tf ${x} ${y} Td (${pdfEscape(value)}) Tj ET\n`;
+  let plain = '';
+  let cursor = x;
+  let lastCenter = x;
+  const accents: Array<{ mark: string; center: number }> = [];
+  for (const character of value.normalize('NFD')) {
+    if (/^[\u0300-\u036f]$/.test(character)) {
+      accents.push({ mark: character, center: lastCenter });
+      continue;
+    }
+    const printable = character.codePointAt(0)! >= 32 && character.codePointAt(0)! <= 126 ? character : '?';
+    const width = pdfCharacterWidth(printable, size, mono);
+    lastCenter = cursor + width / 2;
+    cursor += width;
+    plain += printable;
+  }
+  let commands = `${gray} ${gray} ${gray} rg BT /${mono ? 'F3' : bold ? 'F2' : 'F1'} ${size} Tf ${x} ${y} Td (${pdfEscape(plain)}) Tj ET\n`;
+  accents.forEach(({ mark, center }) => { commands += pdfAccent(mark, center, y, size, gray); });
+  return commands;
 }
 
 function circlePath(x: number, y: number, radius: number) {
@@ -232,15 +273,7 @@ function pageStream(characters: string[], pageIndex: number, representation: Exp
 }
 
 function pdfAuthorName(x: number, y: number, size = 9) {
-  let commands = pdfText('Prepared by Dr. Simonas Cepenas', x, y, size, false, false, 0.48);
-  const scale = size / 9;
-  const prefixWidth = 52.6 * scale;
-  const caronX = x + prefixWidth + 55 * scale;
-  const accentY = y + 10 * scale;
-  const dotX = x + prefixWidth + 70.5 * scale;
-  commands += `0.48 0.48 0.48 RG 0.7 w ${caronX - 2 * scale} ${accentY + 1.2 * scale} m ${caronX} ${accentY - 0.8 * scale} l ${caronX + 2 * scale} ${accentY + 1.2 * scale} l S\n`;
-  commands += `0.48 0.48 0.48 rg ${dotX - 0.75 * scale} ${accentY + 0.4 * scale} ${1.5 * scale} ${1.5 * scale} re f\n`;
-  return commands;
+  return pdfText('Prepared by Dr. Simonas Čepėnas', x, y, size, false, false, 0.48);
 }
 
 function codedPageStreams(text: string, title: string, representation: ExportRepresentation) {

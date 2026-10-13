@@ -39,8 +39,9 @@ export async function POST(request: Request) {
     if (action === 'join') {
       const code = String(body.code ?? '').trim().toUpperCase().slice(0, 6);
       const displayName = String(body.displayName ?? '').trim().slice(0, 32);
+      const participantToken = String(body.participantToken ?? '').trim().slice(0, 64);
       if (!code || !displayName) return corsJson(request, { error: 'Session code and name are required.' }, { status: 400 });
-      const joined = await joinSession(code, displayName);
+      const joined = await joinSession(code, displayName, participantToken || crypto.randomUUID());
       return joined ? corsJson(request, joined, { status: 201 }) : corsJson(request, { error: 'Session not found.' }, { status: 404 });
     }
     return corsJson(request, { error: 'Unknown session action.' }, { status: 400 });
